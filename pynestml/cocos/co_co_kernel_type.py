@@ -19,8 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with NEST.  If not, see <http://www.gnu.org/licenses/>.
 
+from typing import Optional
+
 from pynestml.cocos.co_co import CoCo
-from pynestml.codegeneration.debug_type_converter import DebugTypeConverter
+from pynestml.codegeneration.printers.debug_types_printer import DebugTypesPrinter
 from pynestml.meta_model.ast_neuron import ASTNeuron
 from pynestml.symbols.integer_type_symbol import IntegerTypeSymbol
 from pynestml.symbols.real_type_symbol import RealTypeSymbol
@@ -38,15 +40,15 @@ class CoCoKernelType(CoCo):
     """
 
     @classmethod
-    def check_co_co(cls, node: ASTNeuron):
+    def check_co_co(cls, neuron: ASTNeuron):
         """
         Ensures the coco for the handed over neuron.
-        :param node: a single neuron instance.
-        :type node: ASTNeuron
+        :param neuron: a single neuron instance.
+        :type neuron: ASTNeuron
         """
         kernel_type_visitor = KernelTypeVisitor()
-        kernel_type_visitor._neuron = node
-        node.accept(kernel_type_visitor)
+        kernel_type_visitor._neuron = neuron
+        neuron.accept(kernel_type_visitor)
 
 
 class KernelTypeVisitor(ASTVisitor):
@@ -54,7 +56,7 @@ class KernelTypeVisitor(ASTVisitor):
     This visitor checks if each kernel has the appropriate data type.
     """
 
-    _neuron = None  # the parent ASTNeuron containing the kernel
+    _neuron: Optional[ASTNeuron] = None  # the parent ASTNeuron containing the kernel
 
     def visit_kernel(self, node):
         """
@@ -78,20 +80,20 @@ class KernelTypeVisitor(ASTVisitor):
                 Logger.log_message(error_position=node.get_source_position(), log_level=LoggingLevel.ERROR,
                                    code=code, message=message)
 
-            # check types of the initial values
+            # check types of the state variables
             for order in range(var.get_differential_order()):
                 iv_name = var.get_name() + order * "'"
-                decl = ASTUtils.get_declaration_by_name(self._neuron.get_initial_blocks(), iv_name)
+                decl = ASTUtils.get_declaration_by_name(self._neuron.get_state_blocks(), iv_name)
                 if decl is None:
                     code, message = Messages.get_variable_not_defined(iv_name)
                     Logger.log_message(node=self._neuron, code=code, message=message, log_level=LoggingLevel.ERROR,
                                        error_position=node.get_source_position())
                     continue
-                assert len(self._neuron.get_initial_blocks().get_declarations()[0].get_variables(
+                assert len(self._neuron.get_state_blocks().get_declarations()[0].get_variables(
                 )) == 1, "Only single variables are supported as targets of an assignment."
                 iv = decl.get_variables()[0]
                 if not iv.get_type_symbol().get_value().is_castable_to(PredefinedTypes.get_type("ms")**-order):
-                    actual_type_str = DebugTypeConverter.convert(iv.get_type_symbol())
+                    actual_type_str = DebugTypesPrinter().convert(iv.get_type_symbol())
                     expected_type_str = "s^-" + str(order)
                     code, message = Messages.get_kernel_iv_wrong_type(iv_name, actual_type_str, expected_type_str)
                     Logger.log_message(error_position=node.get_source_position(),

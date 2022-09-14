@@ -18,24 +18,26 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with NEST.  If not, see <http://www.gnu.org/licenses/>.
+
+from typing import Optional
+
 from pynestml.meta_model.ast_assignment import ASTAssignment
 from pynestml.symbols.symbol import SymbolKind
+from pynestml.symbols.variable_symbol import VariableSymbol
 from pynestml.utils.logger import LoggingLevel, Logger
 
 
-class NestAssignmentsHelper(object):
+class NestAssignmentsHelper:
     """
     This class contains several helper functions as used during printing of code.
     """
 
     @classmethod
-    def lhs_variable(cls, assignment):
+    def lhs_variable(cls, assignment: ASTAssignment) -> Optional[VariableSymbol]:
         """
         Returns the corresponding symbol of the assignment.
         :param assignment: a single assignment.
-        :type assignment: ASTAssignment.
         :return: a single variable symbol
-        :rtype: variable_symbol
         """
         assert isinstance(assignment, ASTAssignment), \
             '(PyNestML.CodeGeneration.Assignments) No or wrong type of assignment provided (%s)!' % type(assignment)
@@ -43,9 +45,26 @@ class NestAssignmentsHelper(object):
                                                           SymbolKind.VARIABLE)
         if symbol is not None:
             return symbol
-        else:
-            Logger.log_message(message='No symbol could be resolved!', log_level=LoggingLevel.ERROR)
-            return
+
+        Logger.log_message(message='No symbol could be resolved!', log_level=LoggingLevel.ERROR)
+        return None
+
+    @classmethod
+    def lhs_vector_variable(cls, assignment: ASTAssignment) -> VariableSymbol:
+        """
+        Returns the corresponding symbol of the assignment.
+        :param assignment: a single assignment.
+        :return: a single variable symbol
+        """
+        assert isinstance(assignment, ASTAssignment), \
+            '(PyNestML.CodeGeneration.Assignments) No or wrong type of assignment provided (%s)!' % type(assignment)
+        symbol = assignment.get_scope().resolve_to_symbol(assignment.get_variable().get_vector_parameter(),
+                                                          SymbolKind.VARIABLE)
+        if symbol is not None:
+            return symbol
+
+        Logger.log_message(message='No symbol could be resolved!', log_level=LoggingLevel.WARNING)
+        return None
 
     @classmethod
     def print_assignments_operation(cls, assignment):

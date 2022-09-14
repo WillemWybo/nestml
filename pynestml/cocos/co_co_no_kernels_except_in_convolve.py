@@ -22,6 +22,7 @@
 from pynestml.cocos.co_co import CoCo
 from pynestml.meta_model.ast_function_call import ASTFunctionCall
 from pynestml.meta_model.ast_node import ASTNode
+from pynestml.meta_model.ast_external_variable import ASTExternalVariable
 from pynestml.meta_model.ast_kernel import ASTKernel
 from pynestml.symbols.symbol import SymbolKind
 from pynestml.utils.logger import Logger, LoggingLevel
@@ -43,16 +44,16 @@ class CoCoNoKernelsExceptInConvolve(CoCo):
     """
 
     @classmethod
-    def check_co_co(cls, node):
+    def check_co_co(cls, neuron):
         """
         Ensures the coco for the handed over neuron.
-        :param node: a single neuron instance.
-        :type node: ast_neuron
+        :param neuron: a single neuron instance.
+        :type neuron: ast_neuron
         """
         kernel_collector_visitor = KernelCollectingVisitor()
-        kernel_names = kernel_collector_visitor.collect_kernels(neuron=node)
+        kernel_names = kernel_collector_visitor.collect_kernels(neuron=neuron)
         kernel_usage_visitor = KernelUsageVisitor(_kernels=kernel_names)
-        kernel_usage_visitor.work_on(node)
+        kernel_usage_visitor.work_on(neuron)
 
 
 class KernelUsageVisitor(ASTVisitor):
@@ -77,13 +78,15 @@ class KernelUsageVisitor(ASTVisitor):
         """
         Visits each kernel and checks if it is used correctly.
         :param node: a single node.
-        :type node: ASTNode
         """
         for kernelName in self.__kernels:
             # in order to allow shadowing by local scopes, we first check if the element has been declared locally
             symbol = node.get_scope().resolve_to_symbol(kernelName, SymbolKind.VARIABLE)
             # if it is not a kernel just continue
             if symbol is None:
+                if not isinstance(node, ASTExternalVariable):
+                    code, message = Messages.get_no_variable_found(kernelName)
+                    Logger.log_message(node=self.__neuron_node, code=code, message=message, log_level=LoggingLevel.ERROR)
                 continue
             if not symbol.is_kernel():
                 continue

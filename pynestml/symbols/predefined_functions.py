@@ -18,11 +18,13 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with NEST.  If not, see <http://www.gnu.org/licenses/>.
+from typing import Mapping
+
 from pynestml.symbols.function_symbol import FunctionSymbol
 from pynestml.symbols.predefined_types import PredefinedTypes
 
 
-class PredefinedFunctions(object):
+class PredefinedFunctions:
     """
     This class is used to represent all predefined functions of NESTML.
 
@@ -75,7 +77,8 @@ class PredefinedFunctions(object):
     ABS = 'abs'
     INTEGRATE_ODES = 'integrate_odes'
     CONVOLVE = 'convolve'
-    name2function = {}  # a map dict from function-names to symbols
+    DELIVER_SPIKE = 'deliver_spike'
+    name2function = {}   # type: Mapping[str, FunctionSymbol]
 
     @classmethod
     def register_functions(cls):
@@ -106,7 +109,15 @@ class PredefinedFunctions(object):
         cls.__register_abs_function()
         cls.__register_integrated_odes_function()
         cls.__register_convolve()
+        cls.__register_deliver_spike()
         return
+
+    @classmethod
+    def register_function(cls, name, params, return_type, element_reference):
+        symbol = FunctionSymbol(name=name, param_types=params,
+                                return_type=return_type,
+                                element_reference=element_reference, is_predefined=True)
+        cls.name2function[name] = symbol
 
     @classmethod
     def __register_time_steps_function(cls):
@@ -148,7 +159,9 @@ class PredefinedFunctions(object):
         """
         Registers the print-line function.
         """
-        symbol = FunctionSymbol(name=cls.PRINTLN, param_types=list(),
+        params = list()
+        params.append(PredefinedTypes.get_string_type())
+        symbol = FunctionSymbol(name=cls.PRINTLN, param_types=params,
                                 return_type=PredefinedTypes.get_void_type(),
                                 element_reference=None, is_predefined=True)
         cls.name2function[cls.PRINTLN] = symbol
@@ -368,6 +381,19 @@ class PredefinedFunctions(object):
                                 return_type=PredefinedTypes.get_void_type(),
                                 element_reference=None, is_predefined=True)
         cls.name2function[cls.INTEGRATE_ODES] = symbol
+
+    @classmethod
+    def __register_deliver_spike(cls):
+        """
+        Registers the deliver-spike function.
+        """
+        params = list()
+        params.append(PredefinedTypes.get_real_type())
+        params.append(PredefinedTypes.get_type('ms'))
+        symbol = FunctionSymbol(name=cls.DELIVER_SPIKE, param_types=params,
+                                return_type=PredefinedTypes.get_real_type(),
+                                element_reference=None, is_predefined=True)
+        cls.name2function[cls.DELIVER_SPIKE] = symbol
 
     @classmethod
     def __register_convolve(cls):

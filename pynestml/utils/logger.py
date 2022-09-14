@@ -19,38 +19,46 @@
 # You should have received a copy of the GNU General Public License
 # along with NEST.  If not, see <http://www.gnu.org/licenses/>.
 
-from typing import List, Mapping, Tuple
+from typing import List, Mapping, Optional, Tuple
 
 from collections import OrderedDict
 from enum import Enum
 import json
+
 from pynestml.meta_model.ast_node import ASTNode
 from pynestml.utils.ast_source_location import ASTSourceLocation
 from pynestml.utils.messages import MessageCode
+from pynestml.meta_model.ast_inline_expression import ASTInlineExpression
+from pynestml.meta_model.ast_input_port import ASTInputPort
 
 
 class LoggingLevel(Enum):
     """
     Different types of logging levels, this part can be extended.
     """
-    INFO = 0
-    WARNING = 1
-    ERROR = 2
-    NO = 3
+    DEBUG = 0
+    INFO = 1
+    WARNING = 2
+    ERROR = 3
+    NO = 4
 
 
 class Logger:
     """
     This class represents a logger which can be used to print messages to the screen depending on the logging
     level.
+
         LEVELS:
-            INFO         Print all received messages.
-            WARNING     Print all received warning.
+            DEBUG       Print all received messages.
+            INFO        Print all received information messages, warnings and errors.
+            WARNING     Print all received warnings and errors.
             ERROR       Print all received errors.
-            NO          Print no messages
+            NO          Print no messages.
+
     Hereby, errors are the most specific level, thus no warnings and non critical messages are shown. If logging
-    level is set to WARNING, only warnings and errors are printed. Only if level is set to ALL, all messages
+    level is set to WARNING, only warnings and errors are printed. Only if level is set to DEBUG, all messages
     are printed.
+
     Attributes:
         log       Stores all messages as received during the execution. Map from id (int) to node,type,message
         curr_message A counter indicating the current message, this enables a sorting by the number of message
@@ -59,6 +67,7 @@ class Logger:
     """
     log = {}
     curr_message = None
+    log_frozen = False
     logging_level = None
     current_node = None
     no_print = False
@@ -68,12 +77,15 @@ class Logger:
         """
         Initializes the logger.
         :param logging_level: the logging level as required
+        :type logging_level: LoggingLevel
         """
         cls.logging_level = logging_level
         cls.curr_message = 0
         cls.log = {}
         cls.log_frozen = False
+        return
 
+    @classmethod
     def freeze_log(cls, do_freeze: bool = True):
         """
         Freeze the log: while log is frozen, all logging requests will be ignored.
@@ -101,13 +113,16 @@ class Logger:
     @classmethod
     def log_message(cls, node: ASTNode = None, code: MessageCode = None, message: str = None, error_position: ASTSourceLocation = None, log_level: LoggingLevel = None):
         """
-        Logs the handed over message on the handed over. If the current logging is appropriate, the
-        message is also printed.
+        Logs the handed over message on the handed over node. If the current logging is appropriate, the message is also printed.
         :param node: the node in which the error occurred
         :param code: a single error code
+        :type code: ErrorCode
         :param error_position: the position on which the error occurred.
+        :type error_position: SourcePosition
         :param message: a message.
+        :type message: str
         :param log_level: the corresponding log level.
+        :type log_level: LoggingLevel
         """
         if cls.log_frozen:
             return
@@ -130,47 +145,87 @@ class Logger:
         if cls.no_print:
             return
         if cls.logging_level.value <= log_level.value:
+            node_name = ''
+            if isinstance(node, ASTInlineExpression):
+                node_name = node.variable_name
+            # elif isinstance (node, ASTInputPort):
+            #     node_name = ""
+            elif node is None:
+                node_name = "unknown node"
+            else:
+                node_name = node.get_name()
+
             to_print = '[' + str(cls.curr_message) + ','
-            to_print = (to_print + (node.get_name() + ', ' if node is not None else
+            to_print = (to_print + (node_name + ', ' if node is not None else
                                     cls.current_node.get_name() + ', ' if cls.current_node is not None else 'GLOBAL, '))
             to_print = to_print + str(log_level.name)
             to_print = to_print + (', ' + str(error_position) if error_position is not None else '') + ']: '
             to_print = to_print + str(message)
             print(to_print)
-        return
 
     @classmethod
     def string_to_level(cls, string: str) -> LoggingLevel:
         """
         Returns the logging level corresponding to the handed over string. If no such exits, returns None.
         :param string: a single string representing the level.
+        :type string: str
         :return: a single logging level.
+        :rtype: LoggingLevel
         """
-        if type(string) != str:
-            return LoggingLevel.ERROR
-        elif string == 'INFO':
+        if string == 'DEBUG':
+            return LoggingLevel.DEBUG
+
+        if string == 'INFO':
             return LoggingLevel.INFO
-        elif string == 'WARNING' or string == 'WARNINGS':
+
+        if string == 'WARNING' or string == 'WARNINGS':
             return LoggingLevel.WARNING
-        elif string == 'ERROR' or string == 'ERRORS':
+
+        if string == 'ERROR' or string == 'ERRORS':
             return LoggingLevel.ERROR
-        elif string == 'NO' or string == 'NONE':
+
+        if string == 'NO' or string == 'NONE':
             return LoggingLevel.NO
-        else:
-            return LoggingLevel.ERROR
+
+        raise Exception('Tried to convert unknown string \"' + string + '\" to logging level')
+
+    @classmethod
+    def level_to_string(cls, level: LoggingLevel) -> str:
+        """
+        Returns a string representation of the handed over logging level.
+        :param level: LoggingLevel to convert.
+        :return: a string representing the logging level.
+        """
+        if level == LoggingLevel.DEBUG:
+            return 'DEBUG'
+
+        if level == LoggingLevel.INFO:
+            return 'INFO'
+
+        if level == LoggingLevel.WARNING:
+            return 'WARNING'
+
+        if level == LoggingLevel.ERROR:
+            return 'ERROR'
+
+        if level == LoggingLevel.NO:
+            return 'NO'
+
+        raise Exception('Tried to convert unknown logging level \"' + str(level) + '\" to string')
 
     @classmethod
     def set_logging_level(cls, level: LoggingLevel) -> None:
         """
         Updates the logging level to the handed over one.
         :param level: a new logging level.
+        :type level: LoggingLevel
         """
         if cls.log_frozen:
             return
         cls.logging_level = level
 
     @classmethod
-    def set_current_node(cls, node: ASTNode) -> None:
+    def set_current_node(cls, node: Optional[ASTNode]) -> None:
         """
         Sets the handed over node as the currently processed one. This enables a retrieval of messages for a
         specific node.
@@ -185,7 +240,9 @@ class Logger:
         both.
         :param node: a single node instance
         :param level: a logging level
+        :type level: LoggingLevel
         :return: a list of messages with their levels.
+        :rtype: list((str,Logging_Level)
         """
         if level is None and node is None:
             return cls.get_log()
@@ -202,7 +259,9 @@ class Logger:
         """
         Returns all messages which have a certain logging level.
         :param level: a logging level
+        :type level: LoggingLevel
         :return: a list of messages with their levels.
+        :rtype: list((str,Logging_Level)
         """
         if level is None:
             return cls.get_log()
@@ -218,6 +277,7 @@ class Logger:
         Returns all messages which have been reported for a certain node.
         :param node: a single node instance
         :return: a list of messages with their levels.
+        :rtype: list((str,Logging_Level)
         """
         if node is None:
             return cls.get_log()
@@ -234,6 +294,7 @@ class Logger:
         Indicates whether the handed over node, thus the corresponding model, has errors.
         :param node: a single node instance.
         :return: True if errors detected, otherwise False
+        :rtype: bool
         """
         return len(cls.get_all_messages_of_level_and_or_node(node, LoggingLevel.ERROR)) > 0
 

@@ -18,9 +18,10 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with NEST.  If not, see <http://www.gnu.org/licenses/>.
-import copy
 
-from antlr4 import *
+from typing import Tuple
+
+from antlr4 import CommonTokenStream, FileStream, InputStream
 from antlr4.error.ErrorStrategy import BailErrorStrategy, DefaultErrorStrategy
 from antlr4.error.ErrorListener import ConsoleErrorListener
 
@@ -30,7 +31,6 @@ from pynestml.meta_model.ast_arithmetic_operator import ASTArithmeticOperator
 from pynestml.meta_model.ast_assignment import ASTAssignment
 from pynestml.meta_model.ast_block import ASTBlock
 from pynestml.meta_model.ast_block_with_variables import ASTBlockWithVariables
-from pynestml.meta_model.ast_body import ASTBody
 from pynestml.meta_model.ast_comparison_operator import ASTComparisonOperator
 from pynestml.meta_model.ast_compound_stmt import ASTCompoundStmt
 from pynestml.meta_model.ast_data_type import ASTDataType
@@ -44,21 +44,22 @@ from pynestml.meta_model.ast_function import ASTFunction
 from pynestml.meta_model.ast_function_call import ASTFunctionCall
 from pynestml.meta_model.ast_if_clause import ASTIfClause
 from pynestml.meta_model.ast_if_stmt import ASTIfStmt
+from pynestml.meta_model.ast_inline_expression import ASTInlineExpression
 from pynestml.meta_model.ast_input_block import ASTInputBlock
 from pynestml.meta_model.ast_input_port import ASTInputPort
 from pynestml.meta_model.ast_input_qualifier import ASTInputQualifier
+from pynestml.meta_model.ast_kernel import ASTKernel
 from pynestml.meta_model.ast_logical_operator import ASTLogicalOperator
 from pynestml.meta_model.ast_nestml_compilation_unit import ASTNestMLCompilationUnit
 from pynestml.meta_model.ast_neuron import ASTNeuron
+from pynestml.meta_model.ast_neuron_or_synapse_body import ASTNeuronOrSynapseBody
 from pynestml.meta_model.ast_ode_equation import ASTOdeEquation
-from pynestml.meta_model.ast_inline_expression import ASTInlineExpression
-from pynestml.meta_model.ast_kernel import ASTKernel
 from pynestml.meta_model.ast_output_block import ASTOutputBlock
 from pynestml.meta_model.ast_parameter import ASTParameter
 from pynestml.meta_model.ast_return_stmt import ASTReturnStmt
 from pynestml.meta_model.ast_simple_expression import ASTSimpleExpression
 from pynestml.meta_model.ast_small_stmt import ASTSmallStmt
-from pynestml.utils.ast_source_location import ASTSourceLocation
+from pynestml.meta_model.ast_synapse import ASTSynapse
 from pynestml.meta_model.ast_stmt import ASTStmt
 from pynestml.meta_model.ast_unary_operator import ASTUnaryOperator
 from pynestml.meta_model.ast_unit_type import ASTUnitType
@@ -66,17 +67,17 @@ from pynestml.meta_model.ast_update_block import ASTUpdateBlock
 from pynestml.meta_model.ast_variable import ASTVariable
 from pynestml.meta_model.ast_while_stmt import ASTWhileStmt
 from pynestml.symbol_table.symbol_table import SymbolTable
+from pynestml.utils.ast_source_location import ASTSourceLocation
 from pynestml.utils.ast_utils import ASTUtils
+from pynestml.utils.error_listener import NestMLErrorListener
 from pynestml.utils.logger import Logger, LoggingLevel
 from pynestml.utils.messages import Messages
 from pynestml.visitors.ast_builder_visitor import ASTBuilderVisitor
 from pynestml.visitors.ast_higher_order_visitor import ASTHigherOrderVisitor
 from pynestml.visitors.ast_symbol_table_visitor import ASTSymbolTableVisitor
-from pynestml.utils.error_listener import NestMLErrorListener
 
 
-class ModelParser(object):
-
+class ModelParser:
     @classmethod
     def parse_model(cls, file_path=None):
         """
@@ -135,13 +136,12 @@ class ModelParser(object):
 
         # create and update the corresponding symbol tables
         SymbolTable.initialize_symbol_table(ast.get_source_position())
-        log_to_restore = copy.deepcopy(Logger.get_log())
-        counter = Logger.curr_message
-
-        Logger.set_log(log_to_restore, counter)
         for neuron in ast.get_neuron_list():
             neuron.accept(ASTSymbolTableVisitor())
             SymbolTable.add_neuron_scope(neuron.get_name(), neuron.get_scope())
+        for synapse in ast.get_synapse_list():
+            synapse.accept(ASTSymbolTableVisitor())
+            SymbolTable.add_synapse_scope(synapse.get_name(), synapse.get_scope())
 
         # store source paths
         for neuron in ast.get_neuron_list():
@@ -207,8 +207,7 @@ class ModelParser(object):
         return ret
 
     @classmethod
-    def parse_body(cls, string):
-        # type: (str) -> ASTBody
+    def parse_neuron_or_synapse_body(cls, string: str) -> ASTNeuronOrSynapseBody:
         (builder, parser) = tokenize(string)
         ret = builder.visit(parser.body())
         ret.accept(ASTHigherOrderVisitor(log_set_added_source_position))
@@ -351,6 +350,14 @@ class ModelParser(object):
         return ret
 
     @classmethod
+    def parse_synapse(cls, string):
+        # type: (str) -> ASTSynapse
+        (builder, parser) = tokenize(string)
+        ret = builder.visit(parser.synapse())
+        ret.accept(ASTHigherOrderVisitor(log_set_added_source_position))
+        return ret
+
+    @classmethod
     def parse_ode_equation(cls, string):
         # type: (str) -> ASTOdeEquation
         (builder, parser) = tokenize(string)
@@ -455,8 +462,7 @@ class ModelParser(object):
         return ret
 
 
-def tokenize(string):
-    # type: (str) -> (ASTBuilderVisitor,PyNestMLParser)
+def tokenize(string: str) -> Tuple[ASTBuilderVisitor, PyNestMLParser]:
     lexer = PyNestMLLexer(InputStream(string))
     # create a token stream
     stream = CommonTokenStream(lexer)

@@ -19,22 +19,22 @@
 # You should have received a copy of the GNU General Public License
 # along with NEST.  If not, see <http://www.gnu.org/licenses/>.
 
-from typing import Optional, Union, List, Dict
+from typing import Dict, List, Optional, Union
 
 from pynestml.meta_model.ast_input_block import ASTInputBlock
 from pynestml.meta_model.ast_node import ASTNode
+from pynestml.meta_model.ast_neuron_or_synapse import ASTNeuronOrSynapse
 from pynestml.meta_model.ast_kernel import ASTKernel
-from pynestml.meta_model.ast_body import ASTBody
+from pynestml.meta_model.ast_neuron_or_synapse_body import ASTNeuronOrSynapseBody
 from pynestml.meta_model.ast_equations_block import ASTEquationsBlock
-from pynestml.symbols.variable_symbol import BlockType
-from pynestml.symbols.variable_symbol import VariableSymbol
-from pynestml.utils.ast_utils import ASTUtils
+from pynestml.symbols.symbol import SymbolKind
+from pynestml.symbols.variable_symbol import BlockType, VariableSymbol
 from pynestml.utils.logger import LoggingLevel, Logger
 from pynestml.utils.messages import Messages
 from pynestml.utils.ast_source_location import ASTSourceLocation
 
 
-class ASTNeuron(ASTNode):
+class ASTNeuron(ASTNeuronOrSynapse):
     """
     This class is used to store instances of neurons.
     ASTNeuron represents neuron.
@@ -61,16 +61,7 @@ class ASTNeuron(ASTNode):
         :param artifact_name: the name of the file this neuron is contained in
         :type artifact_name: str
         """
-        super(ASTNeuron, self).__init__(*args, **kwargs)
-        assert isinstance(name, str), \
-            '(PyNestML.ASTNeuron) No  or wrong type of neuron name provided (%s)!' % type(name)
-        assert isinstance(body, ASTBody), \
-            '(PyNestML.ASTNeuron) No or wrong type of neuron body provided (%s)!' % type(body)
-        assert (artifact_name is not None and isinstance(artifact_name, str)), \
-            '(PyNestML.ASTNeuron) No or wrong type of artifact name provided (%s)!' % type(artifact_name)
-        self.name = name
-        self.body = body
-        self.artifact_name = artifact_name
+        super(ASTNeuron, self).__init__(name, body, artifact_name, *args, **kwargs)
 
     def clone(self):
         """
@@ -105,7 +96,7 @@ class ASTNeuron(ASTNode):
         """
         Return the body of the neuron.
         :return: the body containing the definitions.
-        :rtype: ASTBody
+        :rtype: ASTNeuronOrSynapseBody
         """
         return self.body
 
@@ -130,23 +121,6 @@ class ASTNeuron(ASTNode):
                 ret.append(elem)
         return ret
 
-    def get_update_blocks(self):
-        """
-        Returns a list of all update blocks defined in this body.
-        :return: a list of update-block elements.
-        :rtype: list(ASTUpdateBlock)
-        """
-        ret = list()
-        from pynestml.meta_model.ast_update_block import ASTUpdateBlock
-        for elem in self.get_body().get_body_elements():
-            if isinstance(elem, ASTUpdateBlock):
-                ret.append(elem)
-        if isinstance(ret, list) and len(ret) == 1:
-            return ret[0]
-        if isinstance(ret, list) and len(ret) == 0:
-            return None
-        return ret
-
     def get_state_blocks(self):
         """
         Returns a list of all state blocks defined in this body.
@@ -157,23 +131,6 @@ class ASTNeuron(ASTNode):
         from pynestml.meta_model.ast_block_with_variables import ASTBlockWithVariables
         for elem in self.get_body().get_body_elements():
             if isinstance(elem, ASTBlockWithVariables) and elem.is_state:
-                ret.append(elem)
-        if isinstance(ret, list) and len(ret) == 1:
-            return ret[0]
-        if isinstance(ret, list) and len(ret) == 0:
-            return None
-        return ret
-
-    def get_initial_blocks(self):
-        """
-        Returns a list of all initial blocks defined in this body.
-        :return: a list of initial-blocks.
-        :rtype: list(ASTBlockWithVariables)
-        """
-        ret = list()
-        from pynestml.meta_model.ast_block_with_variables import ASTBlockWithVariables
-        for elem in self.get_body().get_body_elements():
-            if isinstance(elem, ASTBlockWithVariables) and elem.is_initial_values:
                 ret.append(elem)
         if isinstance(ret, list) and len(ret) == 1:
             return ret[0]
@@ -247,23 +204,10 @@ class ASTNeuron(ASTNode):
             if isinstance(elem, ASTEquationsBlock):
                 self.get_body().get_body_elements().remove(elem)
 
-    def get_initial_values_declarations(self):
-        """
-        Returns a list of initial values declarations made in this neuron.
-        :return: a list of initial values declarations
-        :rtype: list(ASTDeclaration)
-        """
-        initial_values_block = self.get_initial_blocks()
-        initial_values_declarations = list()
-        if initial_values_block is not None:
-            for decl in initial_values_block.get_declarations():
-                initial_values_declarations.append(decl)
-        return initial_values_declarations
-
     def get_initial_value(self, variable_name):
         assert type(variable_name) is str
 
-        for decl in self.get_initial_values_blocks().get_declarations():
+        for decl in self.get_state_blocks().get_declarations():
             for var in decl.variables:
                 if var.get_complete_name() == variable_name:
                     return decl.get_expression()
@@ -302,42 +246,36 @@ class ASTNeuron(ASTNode):
             return None
         return ret
 
-    def get_input_buffers(self):
+    def get_input_ports(self) -> List[VariableSymbol]:
         """
-        Returns a list of all defined input buffers.
-        :return: a list of all input buffers.
-        :rtype: list(VariableSymbol)
+        Returns a list of all defined input ports.
+        :return: a list of all input ports.
         """
         symbols = self.get_scope().get_symbols_in_this_scope()
         ret = list()
         for symbol in symbols:
-            if isinstance(symbol, VariableSymbol) and (symbol.block_type == BlockType.INPUT_BUFFER_SPIKE
-                                                       or symbol.block_type == BlockType.INPUT_BUFFER_CURRENT):
+            if isinstance(symbol, VariableSymbol) and symbol.block_type == BlockType.INPUT:
                 ret.append(symbol)
         return ret
 
-    def get_spike_buffers(self):
+    def get_spike_input_ports(self) -> List[VariableSymbol]:
         """
-        Returns a list of all spike input buffers defined in the model.
-        :return: a list of all spike input buffers.
-        :rtype: list(VariableSymbol)
+        Returns a list of all spike input ports defined in the model.
         """
         ret = list()
-        for BUFFER in self.get_input_buffers():
-            if BUFFER.is_spike_buffer():
-                ret.append(BUFFER)
+        for port in self.get_input_ports():
+            if port.is_spike_input_port():
+                ret.append(port)
         return ret
 
-    def get_current_buffers(self):
+    def get_continuous_input_ports(self) -> List[VariableSymbol]:
         """
-        Returns a list of all current buffers defined in the model.
-        :return: a list of all current input buffers.
-        :rtype: list(VariableSymbol)
+        Returns a list of all continuous time input ports defined in the model.
         """
         ret = list()
-        for BUFFER in self.get_input_buffers():
-            if BUFFER.is_current_buffer():
-                ret.append(BUFFER)
+        for port in self.get_input_ports():
+            if port.is_continuous_input_port():
+                ret.append(port)
         return ret
 
     def get_parameter_symbols(self):
@@ -349,16 +287,15 @@ class ASTNeuron(ASTNode):
         symbols = self.get_scope().get_symbols_in_this_scope()
         ret = list()
         for symbol in symbols:
-            if isinstance(symbol, VariableSymbol) and symbol.block_type == BlockType.PARAMETERS and \
+            if isinstance(symbol, VariableSymbol) and symbol.block_type in [BlockType.PARAMETERS, BlockType.COMMON_PARAMETERS] and \
                     not symbol.is_predefined:
                 ret.append(symbol)
         return ret
 
-    def get_state_symbols(self):
+    def get_state_symbols(self) -> List[VariableSymbol]:
         """
         Returns a list of all state symbol defined in the model.
         :return: a list of state symbols.
-        :rtype: list(VariableSymbol)
         """
         symbols = self.get_scope().get_symbols_in_this_scope()
         ret = list()
@@ -367,6 +304,36 @@ class ASTNeuron(ASTNode):
                     not symbol.is_predefined:
                 ret.append(symbol)
         return ret
+
+    def get_vector_state_symbols(self) -> List[VariableSymbol]:
+        """
+        Returns a list of all state symbols that are vectors
+        :return: a list of vector state symbols
+        """
+        symbols = self.get_scope().get_symbols_in_this_scope()
+        vector_state_symbols = list()
+        for symbol in symbols:
+            if isinstance(symbol, VariableSymbol) and symbol.block_type == BlockType.STATE and \
+                    not symbol.is_predefined and symbol.has_vector_parameter():
+                vector_state_symbols.append(symbol)
+        return vector_state_symbols
+
+    def get_vector_symbols(self) -> List[VariableSymbol]:
+        """
+        Returns a list of all the vector variables declared in State, Parameters, and Internals block
+        :return: a list of vector symbols
+        """
+        symbols = self.get_scope().get_symbols_in_this_scope()
+        vector_symbols = list()
+        for symbol in symbols:
+            if isinstance(symbol, VariableSymbol) \
+                    and (symbol.block_type == BlockType.STATE or symbol.block_type == BlockType.PARAMETERS
+                         or symbol.block_type == BlockType.INTERNALS) \
+                    and not symbol.is_predefined \
+                    and symbol.has_vector_parameter():
+                vector_symbols.append(symbol)
+
+        return vector_symbols
 
     def get_internal_symbols(self):
         """
@@ -383,19 +350,17 @@ class ASTNeuron(ASTNode):
                 ret.append(symbol)
         return ret
 
-    def get_function_symbols(self):
+    def get_inline_expression_symbols(self) -> List[VariableSymbol]:
         """
-        Returns a list of all function symbols defined in the model.
-        :return: a list of function symbols.
-        :rtype: list(VariableSymbol)
+        Returns a list of all inline expression symbols defined in the model.
+        :return: a list of symbols
         """
-        from pynestml.symbols.variable_symbol import BlockType
         symbols = self.get_scope().get_symbols_in_this_scope()
         ret = list()
         for symbol in symbols:
             if isinstance(symbol, VariableSymbol) \
-                    and (symbol.block_type == BlockType.EQUATION or symbol.block_type == BlockType.INITIAL_VALUES) \
-                    and symbol.is_function:
+                    and (symbol.block_type == BlockType.EQUATION or symbol.block_type == BlockType.STATE) \
+                    and symbol.is_inline_expression:
                 ret.append(symbol)
         return ret
 
@@ -416,105 +381,35 @@ class ASTNeuron(ASTNode):
             return None
         return ret
 
-    def is_multisynapse_spikes(self):
+    def is_multisynapse_spikes(self) -> bool:
         """
-        Returns whether this neuron uses multi-synapse spikes.
+        Returns whether this neuron uses multi-synapse inputs.
         :return: True if multi-synaptic, otherwise False.
-        :rtype: bool
         """
-        buffers = self.get_spike_buffers()
-        for iBuffer in buffers:
-            if iBuffer.has_vector_parameter():
+        ports = self.get_spike_input_ports()
+        for port in ports:
+            if port.has_vector_parameter():
                 return True
         return False
 
-    def get_multiple_receptors(self):
+    def get_multiple_receptors(self) -> List[VariableSymbol]:
         """
-        Returns a list of all spike buffers which are defined as inhibitory and excitatory.
-        :return: a list of spike buffers variable symbols
-        :rtype: list(VariableSymbol)
+        Returns a list of all spike input ports which are defined as both inhibitory *and* excitatory at the same time.
+        :return: a list of spike input port variable symbols
         """
         ret = list()
-        for iBuffer in self.get_spike_buffers():
-            if iBuffer.is_excitatory() and iBuffer.is_inhibitory():
-                if iBuffer is not None:
-                    ret.append(iBuffer)
+        for port in self.get_spike_input_ports():
+            if port.is_excitatory() and port.is_inhibitory():
+                if port is not None:
+                    ret.append(port)
                 else:
-                    code, message = Messages.get_could_not_resolve(iBuffer.get_symbol_name())
+                    code, message = Messages.get_could_not_resolve(port.get_symbol_name())
                     Logger.log_message(
                         message=message,
                         code=code,
-                        error_position=iBuffer.get_source_position(),
+                        error_position=port.get_source_position(),
                         log_level=LoggingLevel.ERROR)
         return ret
-
-    def get_parameter_non_alias_symbols(self):
-        """
-        Returns a list of all variable symbols representing non-function parameter variables.
-        :return: a list of variable symbols
-        :rtype: list(VariableSymbol)
-        """
-        ret = list()
-        for param in self.get_parameter_symbols():
-            if not param.is_function and not param.is_predefined:
-                ret.append(param)
-        return ret
-
-    def get_state_non_alias_symbols(self):
-        """
-        Returns a list of all variable symbols representing non-function state variables.
-        :return: a list of variable symbols
-        :rtype: list(VariableSymbol)
-        """
-        ret = list()
-        for param in self.get_state_symbols():
-            if not param.is_function and not param.is_predefined:
-                ret.append(param)
-        return ret
-
-    def get_initial_values_non_alias_symbols(self):
-        ret = list()
-        for init in self.get_initial_values_symbols():
-            if not init.is_function and not init.is_predefined:
-                ret.append(init)
-        return ret
-
-    def get_internal_non_alias_symbols(self):
-        """
-        Returns a list of all variable symbols representing non-function internal variables.
-        :return: a list of variable symbols
-        :rtype: list(VariableSymbol)
-        """
-        ret = list()
-        for param in self.get_internal_symbols():
-            if not param.is_function and not param.is_predefined:
-                ret.append(param)
-
-        return ret
-
-    def get_initial_values_symbols(self):
-        """
-        Returns a list of all initial values symbol defined in the model. Note that the order here is the same as the
-        order by which the symbols are defined in the model: this is important if a particular variable is defined in
-        terms of another (earlier) variable.
-
-        :return: a list of initial values symbols.
-        :rtype: list(VariableSymbol)
-        """
-
-        iv_blk = self.get_initial_values_blocks()
-        if iv_blk is None:
-            return []
-        iv_syms = []
-        symbols = self.get_scope().get_symbols_in_this_scope()
-        for decl in iv_blk.get_declarations():
-            for var in decl.get_variables():
-                _syms = [sym for sym in symbols if sym.name == var.get_complete_name()]
-                assert len(_syms) > 0, "Symbol by name \"" + var.get_complete_name() + \
-                    "\" not found in initial values block"
-                iv_sym = _syms[0]
-                iv_syms.append(iv_sym)
-        return iv_syms
 
     def get_kernel_by_name(self, kernel_name: str) -> Optional[ASTKernel]:
         assert type(kernel_name) is str
@@ -530,11 +425,11 @@ class ASTNeuron(ASTNode):
 
         # check if defined for a higher order of differentiation
         for decl in self.get_equations_block().get_declarations():
-            if type(decl) is ASTKernel and kernel_name in [s.replace("$", "__DOLLAR").replace("'", "") for s in decl.get_variable_names()]:
+            if type(decl) is ASTKernel and kernel_name in [s.replace("$", "__DOLLAR").replace("'", "") for s in
+                                                           decl.get_variable_names()]:
                 return decl
 
         return None
-
 
     def get_all_kernels(self):
         kernels = []
@@ -543,68 +438,29 @@ class ASTNeuron(ASTNode):
                 kernels.append(decl)
         return kernels
 
-    def get_initial_values_blocks(self):
+    def get_non_inline_state_symbols(self) -> List[VariableSymbol]:
         """
-        Returns a list of all initial blocks defined in this body.
-        :return: a list of initial-blocks.
-        :rtype: list(ASTBlockWithVariables)
-        """
-        ret = list()
-        from pynestml.meta_model.ast_block_with_variables import ASTBlockWithVariables
-        for elem in self.get_body().get_body_elements():
-            if isinstance(elem, ASTBlockWithVariables) and elem.is_initial_values:
-                ret.append(elem)
-        if isinstance(ret, list) and len(ret) == 1:
-            return ret[0]
-        if isinstance(ret, list) and len(ret) == 0:
-            return None
-        return ret
-
-    def remove_initial_blocks(self):
-        """
-        Remove all equations blocks
-        """
-        from pynestml.meta_model.ast_block_with_variables import ASTBlockWithVariables
-        for elem in self.get_body().get_body_elements():
-            if isinstance(elem, ASTBlockWithVariables) and elem.is_initial_values:
-                self.get_body().get_body_elements().remove(elem)
-
-    def get_function_initial_values_symbols(self):
-        """
-        Returns a list of all initial values symbols as defined in the model which are marked as functions.
+        Returns a list of all state symbols as defined in the model which are not marked as inline expressions.
         :return: a list of symbols
-        :rtype: list(VariableSymbol)
         """
         ret = list()
-        for symbol in self.get_initial_values_symbols():
-            if symbol.is_function:
-                ret.append(symbol)
-        return ret
-
-    def get_non_function_initial_values_symbols(self):
-        """
-        Returns a list of all initial values symbols as defined in the model which are not marked as functions.
-        :return: a list of symbols
-        :rtype:list(VariableSymbol)
-        """
-        ret = list()
-        for symbol in self.get_initial_values_symbols():
-            if not symbol.is_function:
+        for symbol in self.get_state_symbols():
+            if not symbol.is_inline_expression:
                 ret.append(symbol)
         return ret
 
     def get_ode_defined_symbols(self):
         """
-        Returns a list of all variable symbols which have been defined in th initial_values blocks
+        Returns a list of all variable symbols which have been defined in th state blocks
         and are provided with an ode.
-        :return: a list of initial value variables with odes
+        :return: a list of state variables with odes
         :rtype: list(VariableSymbol)
         """
         symbols = self.get_scope().get_symbols_in_this_scope()
         ret = list()
         for symbol in symbols:
             if isinstance(symbol, VariableSymbol) and \
-                    symbol.block_type == BlockType.INITIAL_VALUES and symbol.is_ode_defined() \
+                    symbol.block_type == BlockType.STATE and symbol.is_ode_defined() \
                     and not symbol.is_predefined:
                 ret.append(symbol)
         return ret
@@ -624,16 +480,27 @@ class ASTNeuron(ASTNode):
                 ret.append(symbol)
         return ret
 
-    def is_array_buffer(self):
+    def has_vector_port(self) -> bool:
         """
-        This method indicates whether this neuron uses buffers defined vector-wise.
-        :return: True if vector buffers defined, otherwise False.
-        :rtype: bool
+        This method indicates whether this neuron contains input ports defined vector-wise.
+        :return: True if vector ports defined, otherwise False.
         """
-        buffers = self.get_input_buffers()
-        for BUFFER in buffers:
-            if BUFFER.has_vector_parameter():
+        ports = self.get_input_ports()
+        for port in ports:
+            if port.has_vector_parameter():
                 return True
+        return False
+
+    def has_state_vectors(self) -> bool:
+        """
+        This method indicates if the neuron has variables defined as vectors.
+        :return: True if vectors are defined, false otherwise.
+        """
+        state_symbols = self.get_state_symbols()
+        for symbol in state_symbols:
+            if symbol.has_vector_parameter():
+                return True
+
         return False
 
     def get_parameter_invariants(self):
@@ -674,6 +541,7 @@ class ASTNeuron(ASTNode):
         :param declaration: a single declaration
         :type declaration: ast_declaration
         """
+        from pynestml.utils.ast_utils import ASTUtils
         if self.get_internals_blocks() is None:
             ASTUtils.create_internal_block(self)
         n_declarations = len(self.get_internals_blocks().get_declarations())
@@ -689,23 +557,23 @@ class ASTNeuron(ASTNode):
         declaration.accept(symtable_vistor)
         symtable_vistor.block_type_stack.pop()
 
-    def add_to_initial_values_block(self, declaration):
+    def add_to_state_block(self, declaration):
         """
-        Adds the handed over declaration to the initial values block.
+        Adds the handed over declaration to the state block.
         :param declaration: a single declaration.
         :type declaration: ast_declaration
         """
-        if self.get_initial_blocks() is None:
-            ASTUtils.create_initial_values_block(self)
-        self.get_initial_blocks().get_declarations().append(declaration)
-        declaration.update_scope(self.get_initial_blocks().get_scope())
+        from pynestml.utils.ast_utils import ASTUtils
+        if self.get_state_blocks() is None:
+            ASTUtils.create_state_block(self)
+        self.get_state_blocks().get_declarations().append(declaration)
+        declaration.update_scope(self.get_state_blocks().get_scope())
         from pynestml.visitors.ast_symbol_table_visitor import ASTSymbolTableVisitor
 
         symtable_vistor = ASTSymbolTableVisitor()
-        symtable_vistor.block_type_stack.push(BlockType.INITIAL_VALUES)
+        symtable_vistor.block_type_stack.push(BlockType.STATE)
         declaration.accept(symtable_vistor)
         symtable_vistor.block_type_stack.pop()
-        # self.get_initial_blocks().accept(symtable_vistor)
         from pynestml.symbols.symbol import SymbolKind
         assert declaration.get_variables()[0].get_scope().resolve_to_symbol(
             declaration.get_variables()[0].get_name(), SymbolKind.VARIABLE) is not None
@@ -714,7 +582,7 @@ class ASTNeuron(ASTNode):
 
     def add_kernel(self, kernel: ASTKernel) -> None:
         """
-        Adds the handed over declaration to the initial values block.
+        Adds the handed over declaration to the state block.
         :param kernel: a single declaration.
         """
         assert self.get_equations_block() is not None

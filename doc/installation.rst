@@ -1,12 +1,10 @@
 Installing NESTML
 =================
 
-Please note that only Python 3 is supported. The instructions below assume that ``python`` is aliased to or refers to ``python3``, and ``pip`` to ``pip3``.
+Please note that only Python 3.9 (and later versions) are supported. The instructions below assume that ``python`` is aliased to or refers to ``python3``, and ``pip`` to ``pip3``.
 
 Installing the latest release from PyPI
 ---------------------------------------
-
-.. Attention:: As NESTML is currently getting close to its version 4.0 release, we recommend using the development version (see below under :ref:`Installing the latest development version from GitHub`).
 
 The easiest way to install NESTML is to use the `Python Package Index (PyPI) <https://pypi.org>`_. This requires the Python package management system ``pip`` to be installed. In Ubuntu, Mint and Debian Linux you can install ``pip`` as follows:
 
@@ -14,12 +12,11 @@ The easiest way to install NESTML is to use the `Python Package Index (PyPI) <ht
 
    sudo apt install python3-pip
 
-
 NESTML can then be installed into your local user directory via:
 
 .. code-block:: bash
 
-   pip install nestml --user
+   pip install --pre nestml
 
 
 Installing the latest development version from GitHub
@@ -38,6 +35,15 @@ Install into your local user directory using:
 
    cd nestml
    python setup.py install --user
+
+
+.. Attention::
+
+   When using the latest development version, you may also need the development version of ODE-toolbox. It can be installed by running:
+
+   .. code-block:: bash
+
+      pip install git+https://github.com/nest/ode-toolbox
 
 
 Testing
@@ -66,7 +72,7 @@ Test the path to ``c++``:
 
 .. code-block:: bash
 
-   which c++ 
+   which c++
    # '/home/graber/miniconda3/envs/wnestml/bin/c++'
 
 Edit ``nest-config`` and correct the entry under ``--compiler`` with the output returned by ``which c++``:
@@ -87,8 +93,15 @@ The corresponding paths in ``ipython`` are:
 
 .. code-block:: python
 
-   from pynestml.frontend.pynestml_frontend import to_nest, install_nest
-   to_nest(input_path="/home/graber/work/nestml/doc/tutorial/izhikevich_solution.nestml",
-           target_path="/tmp/nestml-component",
-           logging_level="INFO")
-   install_nest("/tmp/nestml-component", "/home/graber/miniconda3/envs/wnestml/") 
+   from pynestml.frontend.pynestml_frontend import generate_nest_target
+   generate_nest_target(input_path="/home/graber/work/nestml/doc/tutorial/izhikevich_solution.nestml",
+                        target_path="/tmp/nestml-component",
+                        logging_level="INFO")
+
+
+Docker installation
+-------------------
+
+NESTML is installed as part of the official NEST Simulator `Docker <https://docker.io/>`_ image.
+
+For detailed instructions, please see https://nest-simulator.readthedocs.io/en/latest/installation/index.html.

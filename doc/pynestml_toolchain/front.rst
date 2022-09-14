@@ -8,7 +8,7 @@ In this section we will demonstrate how the model-processing frontend of PyNESTM
 .. figure:: https://raw.githubusercontent.com/nest/NESTML/master/doc/pynestml_toolchain/pic/front_overview_cropped.jpg
    :alt: Overview of the model-processing Frontend
 
-   Overview of the model-processing Frontend: The lexer and parser process a textual model to the corresponding parse tree and can be completely generated from a grammar artifact. The ASTBuilderVisitor is responsible for the initialization of a model's AST, employing classes which conform to the DSL's grammar. After the AST has been constructed, the CommentCollectorVisitor collects and stores all comments stated in the source model. The ASTSymbolTableVisitor subsequently collects context information of the model by utilizing Symbols and the predefined subsystem. Semantic Checks conclude the rocessing by checking the model for semantical correctness. All steps are orchestrated by the ModelParser.
+   Overview of the model-processing Frontend: The lexer and parser process a textual model to the corresponding parse tree and can be completely generated from a grammar artifact. The ASTBuilderVisitor is responsible for the initialization of a model's AST, employing classes which conform to the DSL's grammar. After the AST has been constructed, the CommentCollectorVisitor collects and stores all comments stated in the source model. The ASTSymbolTableVisitor subsequently collects context information of the model by utilizing Symbols and the predefined subsystem. Semantic Checks conclude the processing by checking the model for semantical correctness. All steps are orchestrated by the ModelParser.
 
 .. _sec-lexer-parser-overview:
 
@@ -250,8 +250,6 @@ Given the fact that context conditions have the commonality of checking the cont
 -  *CoCoFunctionUnique*: Checks that all functions are unique, thus user-defined functions do not redeclare predefined ones.
 
 -  *CoCoIllegalExpression*: Checks that all expressions are typed according to the left-hand side variable, or are at least castable to each other.
-
--  *CoCoInitVarsWithOdesProvided*: Checks that all variables declared in the *initial values* block are provided with the corresponding ODEs.
 
 -  *CoCoInvariantIsBoolean*: Checks that the type of all given invariants is *boolean*.
 

@@ -28,17 +28,17 @@ from pynestml.visitors.ast_visitor import ASTVisitor
 class CoCoEquationsOnlyForInitValues(CoCo):
     """
     This coco ensures that ode equations are only provided for variables which have been defined in the
-    initial_values block.
+    state block.
     Allowed:
-        initial_values:
-            V_m mV = 10mV
+        state:
+            V_m mV = 10 mV
         end
         equations:
             V_m' = ....
         end
     Not allowed:
         state:
-            V_m mV = 10mV
+            V_abs mV = 5 mV
         end
         equations:
             V_m' = ....
@@ -46,18 +46,18 @@ class CoCoEquationsOnlyForInitValues(CoCo):
     """
 
     @classmethod
-    def check_co_co(cls, node):
+    def check_co_co(cls, neuron):
         """
         Ensures the coco for the handed over neuron.
-        :param node: a single neuron instance.
-        :type node: ast_neuron
+        :param neuron: a single neuron instance.
+        :type neuron: ast_neuron
         """
-        node.accept(EquationsOnlyForInitValues())
+        neuron.accept(EquationsOnlyForInitValues())
 
 
 class EquationsOnlyForInitValues(ASTVisitor):
     """
-    This visitor ensures that for all ode equations exists an initial value.
+    This visitor ensures that for all ode equations exists an initial value in the state block.
     """
 
     def visit_ode_equation(self, node):
@@ -67,8 +67,8 @@ class EquationsOnlyForInitValues(ASTVisitor):
         :type node: ast_ode_equation
         """
         symbol = node.get_scope().resolve_to_symbol(node.get_lhs().get_name_of_lhs(), SymbolKind.VARIABLE)
-        if symbol is not None and not symbol.is_init_values():
-            code, message = Messages.get_equation_var_not_in_init_values_block(node.get_lhs().get_name_of_lhs())
+        if symbol is not None and not symbol.is_state():
+            code, message = Messages.get_equation_var_not_in_state_block(node.get_lhs().get_name_of_lhs())
             Logger.log_message(code=code, message=message,
                                error_position=node.get_source_position(),
                                log_level=LoggingLevel.ERROR)

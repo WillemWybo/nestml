@@ -19,13 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with NEST.  If not, see <http://www.gnu.org/licenses/>.
 
-"""
+r"""
 Readthedocs configuration file
-------------------------------
-
-Use:
-sphinx-build -c ../extras/help_generator -b html . _build/html
-
 """
 
 import os
@@ -59,18 +54,22 @@ lexers["nestml"] = NESTMLLexer(startinline=True)
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath('../doc/sphinx-apidoc'))
 sys.path.insert(0, os.path.abspath('doc/sphinx-apidoc'))
+sys.path.insert(0, os.path.abspath('../..'))
 sys.path.insert(0, os.path.abspath('..'))
 sys.path.insert(0, os.path.abspath('.'))
+sys.path.insert(0, os.path.abspath('doc'))
 sys.path.insert(0, os.path.abspath('pynestml'))
 sys.path.insert(0, os.path.abspath('pynestml/codegeneration'))
 
+print("sys.path: " + str(sys.path))
 
+print("Running sphinx-apidoc...")
 os.system("sphinx-apidoc --module-first -o "
  + os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../pynestml')
  + " "
  + os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../pynestml'))	# in-source generation of necessary .rst files
 
-
+print("Copying documentation files...")
 import fnmatch
 import os
 
@@ -87,6 +86,8 @@ for root, dirnames, filenames in os.walk(static_docs_dir):
             matches.append(os.path.join(root, filename))
     for filename in fnmatch.filter(filenames, '*.png'):
             matches.append(os.path.join(root, filename))
+    for filename in fnmatch.filter(filenames, '*.ipynb'):
+            matches.append(os.path.join(root, filename))
 print("Matches:")
 print(matches)
 
@@ -100,12 +101,12 @@ fns = [ fn for fn in fns if fn.endswith(".rst") and not "sphinx-apidoc" in fn ]
 print(fns)
 """
 for fn in matches:
-	if "sphinx-apidoc" in fn:
-		continue
-	fn_from = fn
-	fn_to = os.path.join(static_docs_dir, "sphinx-apidoc", fn[len(static_docs_dir)+1:])
-	print("From " + fn_from + " to " + fn_to)
-	os.system('install -v -D ' + fn_from + " " + fn_to)
+    if "sphinx-apidoc" in fn:
+        continue
+    fn_from = fn
+    fn_to = os.path.join(static_docs_dir, "sphinx-apidoc", fn[len(static_docs_dir)+1:])
+    print("From " + fn_from + " to " + fn_to)
+    os.system('install -v -D ' + fn_from + " " + fn_to)
 #os.system('for i in `find .. -name "*.rst"` ; do if [[ ${i} != *"sphinx-apidoc"* ]] ; then install -v -D ${i} ${i/\.\.\//}; fi ; done')
 
 """os.system('cp -v '
@@ -141,6 +142,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
+    'nbsphinx',
 ]
 
 mathjax_path = "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML"
@@ -205,12 +207,19 @@ html_theme = 'sphinx_rtd_theme'
 # documentation.
 
 html_theme_options = {'logo_only': True}
-html_logo = "nestml-logo.png"
+html_logo = "nestml-logo/nestml-logo.png"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static', 'nestml-logo']
+html_static_path = ['_static']
+
+# These paths are either relative to html_static_path
+# or fully qualified paths (eg. https://...)
+html_css_files = [
+    'css/custom.css',
+    'css/pygments.css'
+]
 
 # -- Options for HTMLHelp output ------------------------------------------
 
@@ -228,9 +237,8 @@ intersphinx_mapping = {'https://docs.python.org/': None}
 
 
 def setup(app):
-    app.add_stylesheet('css/custom.css')
-    app.add_stylesheet('css/pygments.css')
-    app.add_javascript("js/custom.js")
+    app.add_css_file('css/custom.css')
+    app.add_css_file('css/pygments.css')
 
 
 # -- Options for LaTeX output ---------------------------------------------

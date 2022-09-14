@@ -1,8 +1,8 @@
 izhikevich
 ##########
 
-izhikevich - Izhikevich neuron model
 
+izhikevich - Izhikevich neuron model
 
 Description
 +++++++++++
@@ -31,16 +31,11 @@ As published in [1]_, the numerics differs from the standard forward Euler techn
 This model will instead be simulated using the numerical solver that is recommended by ODE-toolbox during code generation.
 
 
-Authors
-+++++++
-
-Hanuschkin, Morrison, Kunkel
-
-
 References
 ++++++++++
 
 .. [1] Izhikevich, Simple Model of Spiking Neurons, IEEE Transactions on Neural Networks (2003) 14:1569-1572
+
 
 
 Parameters
@@ -57,7 +52,7 @@ Parameters
     "b", "real", "0.2", "sensitivity of recovery variable"    
     "c", "mV", "-65mV", "after-spike reset value of V_m"    
     "d", "real", "8.0", "after-spike reset value of U_m"    
-    "V_m_init", "mV", "-70mV", "initial membrane potential"    
+    "V_m_init", "mV", "-65mV", "initial membrane potential"    
     "V_min", "mV", "-inf * mV", "Absolute lower value for the membrane potential."    
     "I_e", "pA", "0pA", "constant external input current"
 
@@ -98,10 +93,10 @@ Equations
 Source code
 +++++++++++
 
-.. code:: nestml
+.. code-block:: nestml
 
    neuron izhikevich:
-     initial_values:
+     state:
        V_m mV = V_m_init # Membrane potential
        U_m real = b * V_m_init # Membrane potential recovery variable
      end
@@ -115,10 +110,11 @@ Source code
        b real = 0.2 # sensitivity of recovery variable
        c mV = -65mV # after-spike reset value of V_m
        d real = 8.0 # after-spike reset value of U_m
-       V_m_init mV = -70mV # initial membrane potential
+       V_m_init mV = -65mV # initial membrane potential
        V_min mV = -inf * mV # Absolute lower value for the membrane potential.
+       # constant external input current
 
-       /* constant external input current*/
+       # constant external input current
        I_e pA = 0pA
      end
      input:
@@ -130,15 +126,13 @@ Source code
 
      update:
        integrate_odes()
-       /* Add synaptic current*/
+       # Add synaptic current
 
-       /* Add synaptic current*/
+       # Add synaptic current
        V_m += spikes
-
-       /* lower bound of membrane potential*/
+       # lower bound of membrane potential
        V_m = (V_m < V_min)?V_min:V_m
-
-       /* threshold crossing*/
+       # threshold crossing
        if V_m >= 30mV:
          V_m = c
          U_m += d
@@ -158,4 +152,4 @@ Characterisation
 
 .. footer::
 
-   Generated at 2020-05-27 18:26:44.928927
+   Generated at 2022-03-28 19:04:28.623142

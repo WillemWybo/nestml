@@ -18,16 +18,19 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with NEST.  If not, see <http://www.gnu.org/licenses/>.
+
+from typing import Mapping
+
 from pynestml.symbols.predefined_types import PredefinedTypes
 from pynestml.symbols.variable_symbol import VariableSymbol, BlockType, VariableType
 
 
-class PredefinedVariables(object):
+class PredefinedVariables:
     """
     This class is used to store all predefined variables as generally available.
     """
-    name2variable = {}  # type: dict -> VariableSymbol
-    E_CONSTANT = 'e'  # type: str
+    name2variable = {}   # type: Mapping[str, VariableSymbol]
+    E_CONSTANT = 'e'     # type: str
     TIME_CONSTANT = 't'  # type: str
 
     @classmethod
@@ -86,7 +89,7 @@ class PredefinedVariables(object):
     @classmethod
     def get_euler_constant(cls):
         """
-        Returns a copy of the variable symbol representing the euler constant t.
+        Returns a copy of the variable symbol representing the euler constant e.
         :return: a variable symbol.
         :rtype: VariableSymbol
         """

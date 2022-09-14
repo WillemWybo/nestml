@@ -71,7 +71,7 @@ parser grammar PyNestMLParser;
          | left=expression comparisonOperator right=expression
          | logicalNot=NOT_KEYWORD term=expression
          | left=expression logicalOperator right=expression
-         | condition=expression QUESTION ifTrue=expression COLON ifNot=expression
+         | condition=expression NEWLINE* QUESTION NEWLINE* ifTrue=expression NEWLINE* COLON NEWLINE* ifNot=expression
          | simpleExpression
          ;
 
@@ -100,12 +100,16 @@ parser grammar PyNestMLParser;
 
   logicalOperator : (logicalAnd=AND_KEYWORD | logicalOr=OR_KEYWORD );
 
+  indexParameter : (sizeStr=NAME | sizeInt=UNSIGNED_INTEGER);
   /**
     ASTVariable Provides a 'marker' AST node to identify variables used in expressions.
     @attribute name: The name of the variable without the differential order, e.g. V_m
+    @attribute vectorParameter: An optional array parameter, e.g., 'tau_syn ms[n_receptors]'.
     @attribute differentialOrder: The corresponding differential order, e.g. 2
   */
-  variable : name=NAME (DIFFERENTIAL_ORDER)*;
+  variable : name=NAME
+  (LEFT_SQUARE_BRACKET vectorParameter=indexParameter RIGHT_SQUARE_BRACKET)?
+  (DIFFERENTIAL_ORDER)*;
 
   /**
     ASTFunctionCall Represents a function call, e.g. myFun("a", "b").
@@ -122,7 +126,7 @@ parser grammar PyNestMLParser;
 
   odeEquation : lhs=variable EQUALS rhs=expression (SEMICOLON)?;
 
-  kernel : KERNEL_KEYWORD variable EQUALS expression (COMMA variable EQUALS expression)* (SEMICOLON)?;
+  kernel : KERNEL_KEYWORD variable EQUALS expression (COMMA NEWLINE* variable EQUALS expression)* (SEMICOLON)?;
 
   /*********************************************************************************************************************
   * Procedural-Language
@@ -151,23 +155,34 @@ parser grammar PyNestMLParser;
 
   /** ASTDeclaration A variable declaration. It can be a simple declaration defining one or multiple variables:
    'a,b,c real = 0'. Or an function declaration 'function a = b + c'.
-    @attribute isRecordable: Is true iff. declaration is track-able.
-    @attribute isFunction: Is true iff. declaration is a function.
+    @attribute isRecordable: Is true iff. declaration is recordable.
+    @attribute isInlineExpression: Is true iff. declaration is an inline expression.
     @attribute variable: List with variables.
     @attribute datatype: Obligatory data type, e.g., 'real' or 'mV/s'.
-    @attribute sizeParameter: An optional array parameter, e.g., 'tau_syn ms[n_receptros]'.
     @attribute rhs: An optional initial expression, e.g., 'a real = 10+10'
     @attribute invariant: A single, optional invariant expression, e.g., '[a < 21]'
    */
   declaration :
-    (isRecordable=RECORDABLE_KEYWORD)? (isFunction=FUNCTION_KEYWORD)?
+    (isRecordable=RECORDABLE_KEYWORD)? (isInlineExpression=INLINE_KEYWORD)?
     variable (COMMA variable)*
     dataType
-    (LEFT_SQUARE_BRACKET sizeParameter=NAME RIGHT_SQUARE_BRACKET)?
     ( EQUALS rhs = expression)?
-    (LEFT_LEFT_SQUARE invariant=expression RIGHT_RIGHT_SQUARE)?;
+    (LEFT_LEFT_SQUARE invariant=expression RIGHT_RIGHT_SQUARE)?
+    decorator=anyDecorator*;
 
-  /** ATReturnStmt Models the return statement in a function.
+  /** ...
+  */
+  anyDecorator : DECORATOR_HOMOGENEOUS | DECORATOR_HETEROGENEOUS | AT namespaceDecoratorNamespace DOUBLE_COLON namespaceDecoratorName;
+
+  /**
+    ASTVariable Provides a 'marker' AST node to identify variables used in expressions.
+    @attribute name: The name of the variable without the differential order, e.g. V_m
+    @attribute differentialOrder: The corresponding differential order, e.g. 2
+  */
+  namespaceDecoratorNamespace : name=NAME;
+  namespaceDecoratorName : name=NAME;
+
+  /** ASTReturnStmt Models the return statement in a function.
     @expression An optional return expression, e.g., return tempVar
    */
   returnStmt : RETURN_KEYWORD expression?;
@@ -192,31 +207,65 @@ parser grammar PyNestMLParser;
   whileStmt : WHILE_KEYWORD expression COLON block END_KEYWORD;
 
   /*********************************************************************************************************************
-  * NestML-Language
+  * NestML: language root element
   *********************************************************************************************************************/
 
   /** ASTNestMLCompilationUnit represents a collection of neurons as stored in a model.
     @attribute neuron: A list of processed models.
   */
-  nestMLCompilationUnit: (neuron | NEWLINE )* EOF;
+  nestMLCompilationUnit: (neuron | synapse | NEWLINE )* EOF;
+
+/*********************************************************************************************************************
+  * NestML neuron
+  *********************************************************************************************************************/
 
   /** ASTNeuron Represents a single neuron.
     @attribute Name:    The name of the neuron, e.g., ht_neuron.
     @attribute body:    The body of the neuron consisting of several sub-blocks.
   */
-  neuron : NEURON_KEYWORD NAME body;
+  neuron : NEURON_KEYWORD NAME neuronBody;
 
   /** ASTBody The body of the neuron, e.g. internal, state, parameter...
+    @attribute blockWithVariables: A single block of variables, e.g. the state block.
+    @attribute equationsBlock: A block of ode declarations.
+    @attribute inputBlock: A block of input port declarations.
+    @attribute outputBlock: A block of output declarations.
+    @attribute updateBlock: A single update block containing the dynamic behavior.
+    @attribute function: A block declaring a user-defined function.
+  */
+  neuronBody: COLON
+         (NEWLINE | blockWithVariables | equationsBlock | inputBlock | outputBlock | updateBlock | function)*
+         END_KEYWORD;
+
+/*********************************************************************************************************************
+  * NestML synapse
+  *********************************************************************************************************************/
+
+  /** ASTSynapse Represents a single synapse.
+    @attribute Name:    The name of the synapse, e.g., ht_synapse.
+    @attribute body:    The body of the synapse consisting of several sub-blocks.
+  */
+  synapse : SYNAPSE_KEYWORD NAME COLON synapseBody;
+
+  /** ASTBody The body of the synapse, e.g. internal, state, parameter...
     @attribute blockWithVariables: A single block of variables, e.g. the state block.
     @attribute updateBlock: A single update block containing the dynamic behavior.
     @attribute equationsBlock: A block of ode declarations.
     @attribute inputBlock: A block of input buffer declarations.
     @attribute outputBlock: A block of output declarations.
     @attribute function: A block declaring a used-defined function.
+    @attribute onReceive: A block declaring an event handler.
   */
-  body: COLON
-         (NEWLINE | blockWithVariables | equationsBlock | inputBlock | outputBlock | updateBlock | function)*
+  synapseBody:
+         ( NEWLINE | blockWithVariables | equationsBlock | inputBlock | outputBlock | function | onReceiveBlock | updateBlock )*
          END_KEYWORD;
+
+  /** ASTOnReceiveBlock 
+     @attribute block implementation of the dynamics
+   */
+  onReceiveBlock: ON_RECEIVE_KEYWORD LEFT_PAREN inputPortName=NAME (COMMA constParameter)* RIGHT_PAREN COLON
+                block
+                END_KEYWORD;
 
   /** ASTBlockWithVariables Represent a block with variables and constants, e.g.:
     state:
@@ -229,7 +278,7 @@ parser grammar PyNestMLParser;
     @attribute declaration: A list of corresponding declarations.
   */
   blockWithVariables:
-    blockType=(STATE_KEYWORD | PARAMETERS_KEYWORD | INTERNALS_KEYWORD | INITIAL_VALUES_KEYWORD)
+    blockType=(STATE_KEYWORD | PARAMETERS_KEYWORD | INTERNALS_KEYWORD)
     COLON
       (declaration | NEWLINE)*
     END_KEYWORD;
@@ -246,7 +295,7 @@ parser grammar PyNestMLParser;
                 block
                 END_KEYWORD;
 
-  /** ASTEquationsBlock A block declaring special functions:
+  /** ASTEquationsBlock A block declaring equations, kernels and inline expressions:
        equations:
          G = (e/tau_syn) * t * exp(-1/tau_syn*t)
          V' = -1/Tau * V + 1/C_m * (convolve(G, spikes) + I_e + I_stim)
@@ -261,8 +310,8 @@ parser grammar PyNestMLParser;
 
   /** ASTInputBlock represents a single input block, e.g.:
     input:
-      spikeBuffer <- excitatory spike
-      currentBuffer pA <- current
+      spike_in <- excitatory spike
+      current_in pA <- continuous
     end
     @attribute inputPort: A list of input ports.
   */
@@ -271,20 +320,20 @@ parser grammar PyNestMLParser;
               END_KEYWORD;
 
   /** ASTInputPort represents a single input port, e.g.:
-      spikeBuffer type <- excitatory spike
+      spike_in <- excitatory spike
     @attribute name: The name of the input port.
     @attribute sizeParameter: Optional size parameter for multisynapse neuron.
-    @attribute datatype: Optional data type of the buffer.
+    @attribute datatype: Optional data type of the port.
     @attribute inputQualifier: The qualifier keyword of the input port, to indicate e.g. inhibitory-only or excitatory-only spiking inputs on this port.
     @attribute isSpike: Indicates that this input port accepts spikes.
-    @attribute isCurrent: Indicates that this input port accepts current generator input.
+    @attribute isContinuous: Indicates that this input port accepts continuous-time input.
   */
   inputPort:
     name=NAME
     (LEFT_SQUARE_BRACKET sizeParameter=NAME RIGHT_SQUARE_BRACKET)?
     (dataType)?
     LEFT_ANGLE_MINUS inputQualifier*
-    (isCurrent = CURRENT_KEYWORD | isSpike = SPIKE_KEYWORD);
+    (isContinuous = CONTINUOUS_KEYWORD | isSpike = SPIKE_KEYWORD);
 
   /** ASTInputQualifier represents the qualifier of an inputPort. Only valid for spiking inputs.
     @attribute isInhibitory: Indicates that this spiking input port is inhibitory.
@@ -292,12 +341,12 @@ parser grammar PyNestMLParser;
   */
   inputQualifier : (isInhibitory=INHIBITORY_KEYWORD | isExcitatory=EXCITATORY_KEYWORD);
 
-  /** ASTOutputBlock Represents the output block of the neuron,i.e., declarations of output buffers:
+  /** ASTOutputBlock Represents the output block of the neuron, i.e., declarations of output ports:
         output: spike
-      @attribute isSpike: true iff the neuron has a spike output.
-      @attribute isCurrent: true iff. the neuron is a current output.
+      @attribute isSpike: true if and only if the neuron has a spike output.
+      @attribute isContinuous: true if and only if the neuron has a continuous-time output.
     */
-  outputBlock: OUTPUT_KEYWORD COLON (isSpike=SPIKE_KEYWORD | isCurrent=CURRENT_KEYWORD) ;
+  outputBlock: OUTPUT_KEYWORD COLON (isSpike=SPIKE_KEYWORD | isContinuous=CONTINUOUS_KEYWORD) ;
 
   /** ASTFunction A single declaration of a user-defined function definition:
       function set_V_m(v mV):
@@ -305,7 +354,7 @@ parser grammar PyNestMLParser;
       end
     @attribute name: The name of the function.
     @attribute parameters: List with function parameters.
-    @attribute returnType: An arbitrary return type, e.g. String or mV.
+    @attribute returnType: An arbitrary return type, e.g. string or mV.
     @attribute block: Implementation of the function.
   */
   function: FUNCTION_KEYWORD NAME LEFT_PAREN (parameter (COMMA parameter)*)? RIGHT_PAREN (returnType=dataType)?
@@ -320,3 +369,12 @@ parser grammar PyNestMLParser;
   */
   parameter : NAME dataType;
 
+  /** ASTConstParameter represents a single parameter consisting of a name and a literal default value, e.g. "foo=42".
+    @attribute name: The name of the parameter.
+    @attribute value: The corresponding default value.
+  */
+  constParameter : name=NAME EQUALS value=(BOOLEAN_LITERAL
+                                      | UNSIGNED_INTEGER
+                                      | FLOAT
+                                      | STRING_LITERAL
+                                      | INF_KEYWORD);

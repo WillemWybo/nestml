@@ -20,7 +20,6 @@
 # along with NEST.  If not, see <http://www.gnu.org/licenses/>.
 from pynestml.cocos.co_co import CoCo
 from pynestml.symbols.symbol import SymbolKind
-from pynestml.symbols.variable_symbol import VariableType
 from pynestml.utils.logger import LoggingLevel, Logger
 from pynestml.utils.messages import Messages
 
@@ -31,14 +30,14 @@ class CoCoVariableOncePerScope(CoCo):
     """
 
     @classmethod
-    def check_co_co(cls, node):
+    def check_co_co(cls, neuron):
         """
         Checks if each variable is defined at most once per scope. Obviously, this test does not check if a declaration
         is shadowed by an embedded scope.
-        :param node: a single neuron
-        :type node: ast_neuron
+        :param neuron: a single neuron
+        :type neuron: ast_neuron
         """
-        cls.__check_scope(node, node.get_scope())
+        cls.__check_scope(neuron, neuron.get_scope())
 
     @classmethod
     def __check_scope(cls, neuron, scope):
