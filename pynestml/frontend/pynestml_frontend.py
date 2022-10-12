@@ -45,30 +45,27 @@ from pynestml.utils.model_parser import ModelParser
 
 
 def get_known_targets():
-    targets = ["NEST", "NEST2", "NEST_compartmental",
-               "python_standalone", "autodoc", "none"]
+    targets = ["NEST", "autodoc", "none"]
     targets = [s.upper() for s in targets]
     return targets
 
 
 def transformers_from_target_name(target_name: str, options: Optional[Mapping[str, Any]] = None) -> Tuple[Transformer, Dict[str, Any]]:
     """Static factory method that returns a list of new instances of a child class of Transformers"""
-    assert target_name.upper() in get_known_targets(
-    ), "Unknown target platform requested: \"" + str(target_name) + "\""
+    assert target_name.upper() in get_known_targets(), "Unknown target platform requested: \"" + str(target_name) + "\""
 
     # default: no transformers (empty list); options unchanged
     transformers: List[Transformer] = []
     if options is None:
         options = {}
 
-    if target_name.upper() in ["NEST", "NEST2"]:
+    if target_name.upper() == "NEST":
         from pynestml.transformers.illegal_variable_name_transformer import IllegalVariableNameTransformer
         from pynestml.transformers.synapse_post_neuron_transformer import SynapsePostNeuronTransformer
 
         # rewrite all C++ keywords
         # from: https://docs.microsoft.com/en-us/cpp/cpp/keywords-cpp 2022-04-23
-        variable_name_rewriter = IllegalVariableNameTransformer({"forbidden_names": ["alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor", "bool", "break", "case", "catch", "char", "char8_t", "char16_t", "char32_t", "class", "compl", "concept", "const", "const_cast", "consteval", "constexpr", "constinit", "continue", "co_await", "co_return", "co_yield", "decltype", "default", "delete", "do", "double", "dynamic_cast", "else", "enum", "explicit", "export", "extern", "false", "float", "for", "friend",
-                                                                "goto", "if", "inline", "int", "long", "mutable", "namespace", "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or", "or_eq", "private", "protected", "public", "register", "reinterpret_cast", "requires", "return", "short", "signed", "sizeof", "static", "static_assert", "static_cast", "struct", "switch", "template", "this", "thread_local", "throw", "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t", "while", "xor", "xor_eq"]})
+        variable_name_rewriter = IllegalVariableNameTransformer({"forbidden_names": ["alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor", "bool", "break", "case", "catch", "char", "char8_t", "char16_t", "char32_t", "class", "compl", "concept", "const", "const_cast", "consteval", "constexpr", "constinit", "continue", "co_await", "co_return", "co_yield", "decltype", "default", "delete", "do", "double", "dynamic_cast", "else", "enum", "explicit", "export", "extern", "false", "float", "for", "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace", "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or", "or_eq", "private", "protected", "public", "register", "reinterpret_cast", "requires", "return", "short", "signed", "sizeof", "static", "static_assert", "static_cast", "struct", "switch", "template", "this", "thread_local", "throw", "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t", "while", "xor", "xor_eq"]})
         transformers.append(variable_name_rewriter)
 
         # co-generate neuron and synapse
@@ -81,26 +78,16 @@ def transformers_from_target_name(target_name: str, options: Optional[Mapping[st
 
 def code_generator_from_target_name(target_name: str, options: Optional[Mapping[str, Any]] = None) -> CodeGenerator:
     """Static factory method that returns a new instance of a child class of CodeGenerator"""
-    assert target_name.upper() in get_known_targets(
-    ), "Unknown target platform requested: \"" + str(target_name) + "\""
+    assert target_name.upper() in get_known_targets(), "Unknown target platform requested: \"" + str(target_name) + "\""
 
     if target_name.upper() == "NEST":
         from pynestml.codegeneration.nest_code_generator import NESTCodeGenerator
         return NESTCodeGenerator(options)
 
-    if target_name.upper() == "NEST2":
-        from pynestml.codegeneration.nest2_code_generator import NEST2CodeGenerator
-        return NEST2CodeGenerator(options)
-
     if target_name.upper() == "AUTODOC":
         from pynestml.codegeneration.autodoc_code_generator import AutoDocCodeGenerator
-        assert options is None or options == {
-        }, "\"autodoc\" code generator does not support options"
+        assert options is None or options == {}, "\"autodoc\" code generator does not support options"
         return AutoDocCodeGenerator()
-
-    if target_name.upper() == "NEST_COMPARTMENTAL":
-        from pynestml.codegeneration.nest_compartmental_code_generator import NESTCompartmentalCodeGenerator
-        return NESTCompartmentalCodeGenerator()
 
     if target_name.upper() == "NONE":
         # dummy/null target: user requested to not generate any code
@@ -108,8 +95,7 @@ def code_generator_from_target_name(target_name: str, options: Optional[Mapping[
         Logger.log_message(None, code, message, None, LoggingLevel.INFO)
         return CodeGenerator("", options)
 
-    # cannot reach here due to earlier assert -- silence
-    assert "Unknown code generator requested: " + target_name
+    assert "Unknown code generator requested: " + target_name  # cannot reach here due to earlier assert -- silence
     # static checker warnings
 
 
@@ -117,10 +103,9 @@ def builder_from_target_name(target_name: str, options: Optional[Mapping[str, An
     r"""Static factory method that returns a new instance of a child class of Builder"""
     from pynestml.frontend.pynestml_frontend import get_known_targets
 
-    assert target_name.upper() in get_known_targets(
-    ), "Unknown target platform requested: \"" + str(target_name) + "\""
+    assert target_name.upper() in get_known_targets(), "Unknown target platform requested: \"" + str(target_name) + "\""
 
-    if target_name.upper() in ["NEST", "NEST2", "NEST_COMPARTMENTAL"]:
+    if target_name.upper() == "NEST":
         from pynestml.codegeneration.nest_builder import NESTBuilder
         return NESTBuilder(options)
 
@@ -131,7 +116,6 @@ def generate_target(input_path: Union[str, Sequence[str]], target_platform: str,
                     install_path: str = None, logging_level="ERROR", module_name=None, store_log=False, suffix="",
                     dev=False, codegen_opts: Optional[Mapping[str, Any]] = None):
     r"""Generate and build code for the given target platform.
-
     Parameters
     ----------
     input_path : str **or** Sequence[str]
@@ -205,7 +189,6 @@ def generate_nest_target(input_path: Union[str, Sequence[str]], target_path: Opt
                          module_name=None, store_log: bool = False, suffix: str = "",
                          dev: bool = False, codegen_opts: Optional[Mapping[str, Any]] = None):
     r"""Generate and build code for NEST Simulator.
-
     Parameters
     ----------
     input_path : str **or** Sequence[str]
@@ -232,42 +215,9 @@ def generate_nest_target(input_path: Union[str, Sequence[str]], target_path: Opt
                     dev=dev, codegen_opts=codegen_opts)
 
 
-def generate_nest_compartmental_target(input_path: Union[str, Sequence[str]], target_path: Optional[str] = None,
-                                       install_path: Optional[str] = None, logging_level="ERROR",
-                                       module_name=None, store_log: bool = False, suffix: str = "",
-                                       dev: bool = False, codegen_opts: Optional[Mapping[str, Any]] = None):
-    r"""Generate and build compartmental model code for NEST Simulator.
-
-    Parameters
-    ----------
-    input_path : str **or** Sequence[str]
-        Path to the NESTML file(s) or to folder(s) containing NESTML files to convert to NEST code.
-    target_path : str, optional (default: append "target" to `input_path`)
-        Path to the generated C++ code and install files.
-    logging_level : str, optional (default: "ERROR")
-        Sets which level of information should be displayed duing code generation (among "ERROR", "WARNING", "INFO", or "NO").
-    module_name : str, optional (default: "nestmlmodule")
-        Name of the module, which will be used to import the model in NEST via `nest.Install(module_name)`.
-    store_log : bool, optional (default: False)
-        Whether the log should be saved to file.
-    suffix : str, optional (default: "")
-        A suffix string that will be appended to the name of all generated models.
-    install_path
-        Path to the directory where the generated NEST extension module will be installed into. If the parameter is not specified, the module will be installed into the NEST Simulator installation directory, as reported by nest-config.
-    dev : bool, optional (default: False)
-        Enable development mode: code generation is attempted even for models that contain errors, and extra information is rendered in the generated code.
-    codegen_opts : Optional[Mapping[str, Any]]
-        A dictionary containing additional options for the target code generator.
-    """
-    generate_target(input_path, target_platform="NEST_compartmental", target_path=target_path,
-                    logging_level=logging_level, module_name=module_name, store_log=store_log,
-                    suffix=suffix, install_path=install_path, dev=dev, codegen_opts=codegen_opts)
-
-
 def main() -> int:
     """
     Entry point for the command-line application.
-
     Returns
     -------
     The process exit code: 0 for success, > 0 for failure
@@ -285,7 +235,6 @@ def main() -> int:
 def process():
     r"""
     The main toolchain workflow entry point. For all models: parse, validate, transform, generate code and build.
-
     Returns
     -------
     errors_occurred : bool
@@ -316,20 +265,15 @@ def process():
     codegen_and_builder_opts = FrontendConfiguration.get_codegen_opts()
     transformers, codegen_and_builder_opts = transformers_from_target_name(FrontendConfiguration.get_target_platform(),
                                                                            options=codegen_and_builder_opts)
-    _codeGenerator = code_generator_from_target_name(
-        FrontendConfiguration.get_target_platform())
-    codegen_and_builder_opts = _codeGenerator.set_options(
-        codegen_and_builder_opts)
-    _builder = builder_from_target_name(
-        FrontendConfiguration.get_target_platform())
+    _codeGenerator = code_generator_from_target_name(FrontendConfiguration.get_target_platform())
+    codegen_and_builder_opts = _codeGenerator.set_options(codegen_and_builder_opts)
+    _builder = builder_from_target_name(FrontendConfiguration.get_target_platform())
 
     if _builder is not None:
-        codegen_and_builder_opts = _builder.set_options(
-            codegen_and_builder_opts)
+        codegen_and_builder_opts = _builder.set_options(codegen_and_builder_opts)
 
     if len(codegen_and_builder_opts) > 0:
-        raise CodeGeneratorOptionsException(
-            "The code generator option(s) \"" + ", ".join(codegen_and_builder_opts.keys()) + "\" do not exist.")
+        raise CodeGeneratorOptionsException("The code generator option(s) \"" + ", ".join(codegen_and_builder_opts.keys()) + "\" do not exist.")
 
     if len(compilation_units) > 0:
         # generate a list of all neurons + synapses
@@ -345,8 +289,7 @@ def process():
         if not FrontendConfiguration.is_dev:
             for model in models:
                 if Logger.has_errors(model):
-                    code, message = Messages.get_model_contains_errors(
-                        model.get_name())
+                    code, message = Messages.get_model_contains_errors(model.get_name())
                     Logger.log_message(node=model, code=code, message=message,
                                        error_position=model.get_source_position(),
                                        log_level=LoggingLevel.WARNING)
@@ -383,12 +326,11 @@ def init_predefined():
 
 
 def create_report_dir():
-    if not os.path.isdir(os.path.join(FrontendConfiguration.get_target_path(), "..", "report")):
-        os.makedirs(os.path.join(
-            FrontendConfiguration.get_target_path(), "..", "report"))
+    if not os.path.isdir(os.path.join(FrontendConfiguration.get_target_path(), os.pardir, "report")):
+        os.makedirs(os.path.join(FrontendConfiguration.get_target_path(), os.pardir, "report"))
 
 
 def store_log_to_file():
-    with open(str(os.path.join(FrontendConfiguration.get_target_path(), "..", "report",
+    with open(str(os.path.join(FrontendConfiguration.get_target_path(), os.pardir, "report",
                                "log")) + ".txt", "w+") as f:
         f.write(str(Logger.get_json_format()))
