@@ -56,6 +56,8 @@ from pynestml.meta_model.ast_variable import ASTVariable
 from pynestml.symbol_table.symbol_table import SymbolTable
 from pynestml.symbols.symbol import SymbolKind
 from pynestml.utils.ast_channel_information_collector import ASTChannelInformationCollector
+from pynestml.utils.concentration_processing import ConcentrationProcessing
+from pynestml.utils.conc_info_enricher import ConcInfoEnricher
 from pynestml.utils.ast_utils import ASTUtils
 from pynestml.utils.chan_info_enricher import ChanInfoEnricher
 from pynestml.utils.logger import Logger
@@ -67,6 +69,7 @@ from pynestml.utils.syns_processing import SynsProcessing
 from pynestml.visitors.ast_random_number_generator_visitor import ASTRandomNumberGeneratorVisitor
 from pynestml.visitors.ast_symbol_table_visitor import ASTSymbolTableVisitor
 from odetoolbox import analysis
+import json
 
 
 class NESTCompartmentalCodeGenerator(CodeGenerator):
@@ -288,12 +291,18 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
                                                        ASTInputPort]):
         odetoolbox_indict = self.create_ode_indict(
             neuron, parameters_block, kernel_buffers)
+        print("ODE Input:")
+        print(json.dumps(odetoolbox_indict, indent=4), end="")
+
         full_solver_result = analysis(
             odetoolbox_indict,
             disable_stiffness_check=True,
             preserve_expressions=self.get_option("preserve_expressions"),
             simplify_expression=self.get_option("simplify_expression"),
             log_level=FrontendConfiguration.logging_level)
+        print("ODE Output:")
+        print(json.dumps(full_solver_result, indent=4), end="")
+
         analytic_solver = None
         analytic_solvers = [
             x for x in full_solver_result if x["solver"] == "analytical"]
@@ -468,10 +477,14 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
         analytic_solver, numeric_solver = self.ode_toolbox_analysis(
             neuron, kernel_buffers)
 
+        """
         # separate analytic solutions by kernel
         # this is is needed for the synaptic case
         self.kernel_name_to_analytic_solver[neuron.get_name(
         )] = self.ode_toolbox_anaysis_cm_syns(neuron, kernel_buffers)
+        """
+
+
         self.analytic_solver[neuron.get_name()] = analytic_solver
         self.numeric_solver[neuron.get_name()] = numeric_solver
 
@@ -707,10 +720,21 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
         namespace["cm_unique_suffix"] = self.getUniqueSuffix(neuron)
         namespace["chan_info"] = ASTChannelInformationCollector.get_chan_info(neuron)
         namespace["chan_info"] = ChanInfoEnricher.enrich_with_additional_info(neuron, namespace["chan_info"])
+        print("CHANNEL INFO:")
+        ASTChannelInformationCollector.print_dictionary(namespace["chan_info"], 0)
 
         namespace["syns_info"] = SynsProcessing.get_syns_info(neuron)
+        #print("SYNS INFO:")
+        #print("PRE TRANSFORM")
+        #ASTChannelInformationCollector.print_dictionary(namespace["syns_info"], 0)
         syns_info_enricher = SynsInfoEnricher(neuron)
         namespace["syns_info"] = syns_info_enricher.enrich_with_additional_info(neuron, namespace["syns_info"], self.kernel_name_to_analytic_solver)
+        namespace["conc_info"] = ConcentrationProcessing.get_mechs_info(neuron)
+        namespace["conc_info"] = ConcInfoEnricher.enrich_with_additional_info(neuron, namespace["conc_info"])
+        print("CONCENTRATION INFO")
+        ASTChannelInformationCollector.print_dictionary(namespace["conc_info"], 0)
+        #print("POST TRANSFORM")
+        #ASTChannelInformationCollector.print_dictionary(namespace["syns_info"], 0)
 
         # maybe log this on DEBUG?
         # print("syns_info: ")
@@ -878,6 +902,7 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
         odetoolbox_indict = {}
         odetoolbox_indict["dynamics"] = []
         equations_block = neuron.get_equations_blocks()[0]
+
         for equation in equations_block.get_ode_equations():
             # n.b. includes single quotation marks to indicate differential
             # order

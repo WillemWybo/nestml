@@ -121,9 +121,9 @@ parser grammar PyNestMLParser;
   * Equations-Language
   *********************************************************************************************************************/
 
-  inlineExpression : (recordable=RECORDABLE_KEYWORD)? INLINE_KEYWORD variableName=NAME dataType EQUALS expression (SEMICOLON)?;
+  inlineExpression : (recordable=RECORDABLE_KEYWORD)? INLINE_KEYWORD variableName=NAME dataType EQUALS expression (SEMICOLON)? decorator=anyDecorator*;
 
-  odeEquation : lhs=variable EQUALS rhs=expression (SEMICOLON)?;
+  odeEquation : lhs=variable EQUALS rhs=expression (SEMICOLON)? decorator=anyDecorator*;
 
   kernel : KERNEL_KEYWORD variable EQUALS expression (COMMA NEWLINE* variable EQUALS expression)* (SEMICOLON)?;
 
@@ -329,7 +329,7 @@ parser grammar PyNestMLParser;
   */
   inputPort:
     name=NAME
-    (LEFT_SQUARE_BRACKET sizeParameter=NAME RIGHT_SQUARE_BRACKET)?
+    (LEFT_SQUARE_BRACKET sizeParameter=expression RIGHT_SQUARE_BRACKET)?
     (dataType)?
     LEFT_ANGLE_MINUS inputQualifier*
     (isContinuous = CONTINUOUS_KEYWORD | isSpike = SPIKE_KEYWORD);

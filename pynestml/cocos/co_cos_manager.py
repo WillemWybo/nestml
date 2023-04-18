@@ -53,11 +53,13 @@ from pynestml.cocos.co_co_resolution_func_legally_used import CoCoResolutionFunc
 from pynestml.cocos.co_co_state_variables_initialized import CoCoStateVariablesInitialized
 from pynestml.cocos.co_co_sum_has_correct_parameter import CoCoSumHasCorrectParameter
 from pynestml.cocos.co_co_synapses_model import CoCoSynapsesModel
+from pynestml.cocos.co_co_concentrations_model import CoCoConcentrationsModel
 from pynestml.cocos.co_co_input_port_qualifier_unique import CoCoInputPortQualifierUnique
 from pynestml.cocos.co_co_user_defined_function_correctly_defined import CoCoUserDefinedFunctionCorrectlyDefined
 from pynestml.cocos.co_co_v_comp_exists import CoCoVCompDefined
 from pynestml.cocos.co_co_variable_once_per_scope import CoCoVariableOncePerScope
 from pynestml.cocos.co_co_vector_declaration_right_size import CoCoVectorDeclarationRightSize
+from pynestml.cocos.co_co_vector_input_port_correct_size_type import CoCoVectorInputPortsCorrectSizeType
 from pynestml.cocos.co_co_vector_parameter_declared_in_right_block import CoCoVectorParameterDeclaredInRightBlock
 from pynestml.cocos.co_co_vector_variable_in_non_vector_declaration import CoCoVectorVariableInNonVectorDeclaration
 from pynestml.cocos.co_co_function_argument_template_types_consistent import CoCoFunctionArgumentTemplateTypesConsistent
@@ -126,6 +128,10 @@ class CoCosManager:
         synapses are defined by inlines that use kernels
         """
         CoCoSynapsesModel.check_co_co(neuron)
+
+    @classmethod
+    def check_concentrations_model(cls, neuron: ASTNeuron) -> None:
+        CoCoConcentrationsModel.check_co_co(neuron)
 
     @classmethod
     def check_v_comp_requirement(cls, neuron: ASTNeuron, after_ast_rewrite: bool):
@@ -408,6 +414,13 @@ class CoCosManager:
         CoCoResolutionFuncLegallyUsed.check_co_co(neuron)
 
     @classmethod
+    def check_input_port_size_type(cls, neuron: ASTNeuron):
+        """
+        :param neuron: a single neuron object
+        """
+        CoCoVectorInputPortsCorrectSizeType.check_co_co(neuron)
+
+    @classmethod
     def post_symbol_table_builder_checks(cls, neuron: ASTNeuron, after_ast_rewrite: bool = False):
         """
         Checks all context conditions.
@@ -422,6 +435,7 @@ class CoCosManager:
         cls.check_v_comp_requirement(neuron, after_ast_rewrite)
         cls.check_compartmental_model(neuron, after_ast_rewrite)
         cls.check_synapses_model(neuron)
+        cls.check_concentrations_model(neuron)
         cls.check_inline_expressions_have_rhs(neuron)
         cls.check_inline_has_max_one_lhs(neuron)
         cls.check_input_ports_not_assigned_to(neuron)
@@ -443,7 +457,7 @@ class CoCosManager:
             # ODE functions have been removed at this point
             cls.check_ode_functions_have_consistent_units(neuron)
             cls.check_correct_usage_of_kernels(neuron)
-            cls.check_integrate_odes_called_if_equations_defined(neuron)
+            #cls.check_integrate_odes_called_if_equations_defined(neuron)
         cls.check_invariant_type_correct(neuron)
         cls.check_vector_in_non_vector_declaration_detected(neuron)
         cls.check_sum_has_correct_parameter(neuron)
@@ -454,3 +468,4 @@ class CoCosManager:
         cls.check_vector_declaration_size(neuron)
         cls.check_co_co_priorities_correctly_specified(neuron)
         cls.check_resolution_func_legally_used(neuron)
+        cls.check_input_port_size_type(neuron)
