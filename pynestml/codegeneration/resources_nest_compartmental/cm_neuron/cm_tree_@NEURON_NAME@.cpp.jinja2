@@ -22,6 +22,9 @@
  */
 #include "{{neuronSpecificFileNamesCmSyns["tree"]}}.h"
 #include <algorithm>
+{%- if with_profiling %}
+#include <chrono>
+{%- endif %}
 
 nest::Compartment{{cm_unique_suffix}}::Compartment{{cm_unique_suffix}}( const long compartment_index, const long parent_index)
   : xx_( 0.0 )
@@ -487,6 +490,12 @@ nest::CompTree{{cm_unique_suffix}}::get_recordables()
     recordables.insert( recordables_comp.begin(), recordables_comp.end() );
     recordables[ Name( "v_comp" + std::to_string( comp_index ) ) ] = &v_comp_vec[ comp_index ];
   }
+  {%- if with_profiling %}
+  std::map< Name, {{ cm_scalar_t }}* > global_recordables = neuron_currents.get_global_recordables();
+  recordables.insert( global_recordables.begin(), global_recordables.end() );
+  recordables[ Name( "profile_construct_matrix_ms" ) ] = &profile_construct_matrix_ms_;
+  recordables[ Name( "profile_solve_matrix_ms" ) ] = &profile_solve_matrix_ms_;
+  {%- endif %}
   return recordables;
 }
 
@@ -509,6 +518,10 @@ nest::CompTree{{cm_unique_suffix}}::pre_run_hook()
   sweeping_order = std::vector< std::vector< Compartment{{cm_unique_suffix}}* > >();
   compute_sweeping_order(leafs_);
   create_tree_data_soa_by_sweeping_order();
+  {%- if with_profiling %}
+  profile_construct_matrix_ms_ = 0.0;
+  profile_solve_matrix_ms_ = 0.0;
+  {%- endif %}
 
   // initialize the compartments
   for ( auto compartment_it = compartments_.begin(); compartment_it != compartments_.end(); ++compartment_it )
@@ -550,6 +563,9 @@ nest::CompTree{{cm_unique_suffix}}::get_compartment_voltage( const long compartm
 void
 nest::CompTree{{cm_unique_suffix}}::construct_matrix( const long lag )
 {
+  {%- if with_profiling %}
+  const auto profile_t0 = std::chrono::steady_clock::now();
+  {%- endif %}
   // compute all channel currents, receptor currents, and input currents
   neuron_currents.f_numstep( v_comp_vec, lag );
 
@@ -568,6 +584,10 @@ nest::CompTree{{cm_unique_suffix}}::construct_matrix( const long lag )
   {
     ( *compartment_it )->construct_matrix_coupling_elements();
   }
+  {%- if with_profiling %}
+  const auto profile_t1 = std::chrono::steady_clock::now();
+  profile_construct_matrix_ms_ += std::chrono::duration<{{ cm_scalar_t }}, std::milli>( profile_t1 - profile_t0 ).count();
+  {%- endif %}
 }
 
 /**
@@ -576,11 +596,18 @@ nest::CompTree{{cm_unique_suffix}}::construct_matrix( const long lag )
 void
 nest::CompTree{{cm_unique_suffix}}::solve_matrix()
 {
+  {%- if with_profiling %}
+  const auto profile_t0 = std::chrono::steady_clock::now();
+  {%- endif %}
   // start the down sweep (puts to zero the sub diagonal matrix elements)
   solve_matrix_downsweep();
 
   // do up sweep to set voltages
   solve_matrix_upsweep();
+  {%- if with_profiling %}
+  const auto profile_t1 = std::chrono::steady_clock::now();
+  profile_solve_matrix_ms_ += std::chrono::duration<{{ cm_scalar_t }}, std::milli>( profile_t1 - profile_t0 ).count();
+  {%- endif %}
 }
 
 void nest::CompTree{{cm_unique_suffix}}::compute_sweeping_order( std::vector< Compartment{{cm_unique_suffix}}* > parallel_comps )

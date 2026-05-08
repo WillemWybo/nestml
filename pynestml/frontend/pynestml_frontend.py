@@ -139,7 +139,7 @@ def code_generator_from_target_name(target_name: str, options: Optional[Mapping[
 
     if target_name.upper() == "NEST_COMPARTMENTAL":
         from pynestml.codegeneration.nest_compartmental_code_generator import NESTCompartmentalCodeGenerator
-        return NESTCompartmentalCodeGenerator()
+        return NESTCompartmentalCodeGenerator(options)
 
     if target_name.upper() == "SPINNAKER":
         from pynestml.codegeneration.spinnaker_code_generator import SpiNNakerCodeGenerator
@@ -427,6 +427,17 @@ def generate_nest_compartmental_target(input_path: Union[str, Sequence[str]], ta
           code uses a fast polynomial approximation only for dynamic propagator
           ``exp()`` terms in hot loops; all other exponentials use
           ``std::exp``/``std::expf``.
+        - ``single_precision_propagator_exp_mode``: ``"bounded"`` or
+          ``"plain"`` (default: ``"bounded"``). Only used when
+          ``fp_precision="single"`` and ``use_fastexp=False``. Selects
+          bounded or raw ``std::expf`` evaluation for propagator exponentials.
+        - ``with_profiling``: bool (default: ``False``). If ``True``, generated
+          models expose cumulative profiling recordables for matrix assembly,
+          Hines solves, and current-evaluation steps.
+        - ``freeze_exp_mode``: ``"none"`` or ``"freeze_init"`` (default:
+          ``"none"``). ``"freeze_init"`` replaces runtime ``exp`` evaluations
+          in ``f_numstep()`` with values computed once in ``pre_run_hook()``
+          from the initialized model state and active timestep.
     """
     generate_target(input_path, target_platform="NEST_compartmental", target_path=target_path,
                     logging_level=logging_level, module_name=module_name, store_log=store_log,
@@ -521,7 +532,10 @@ def process() -> bool:
                                                                           options=FrontendConfiguration.get_codegen_opts())
 
     # initialise code generator
-    code_generator = code_generator_from_target_name(FrontendConfiguration.get_target_platform())
+    code_generator = code_generator_from_target_name(
+        FrontendConfiguration.get_target_platform(),
+        options=FrontendConfiguration.get_codegen_opts(),
+    )
     unused_opts_codegen = code_generator.set_options(FrontendConfiguration.get_codegen_opts())
 
     # initialise builder

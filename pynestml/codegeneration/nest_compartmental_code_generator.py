@@ -111,6 +111,9 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
         "synapse_models": [],
         "fp_precision": "double",
         "use_fastexp": False,
+        "single_precision_propagator_exp_mode": "bounded",
+        "with_profiling": False,
+        "freeze_exp_mode": "none",
         "neuron_parent_class": "ArchivingNode",
         "neuron_parent_class_include": "archiving_node.h",
         "preserve_expressions": True,
@@ -169,16 +172,40 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
         if self.get_option("use_fastexp"):
             propagator_exp_function = "cm_fast_propagator_exp"
         elif self.get_option("fp_precision") == "single":
-            propagator_exp_function = "bounded_propagator_expf"
+            if self.get_option("single_precision_propagator_exp_mode") == "plain":
+                propagator_exp_function = "std::expf"
+            else:
+                propagator_exp_function = "bounded_propagator_expf"
         else:
             propagator_exp_function = exp_function
+
+        self._runtime_freeze_exp_formatter = None
+        if self.get_option("freeze_exp_mode") == "freeze_init":
+            class _RuntimeFreezeExpFormatter:
+                def __init__(self):
+                    self._context = None
+
+                def set_context(self, context):
+                    self._context = context
+
+                def clear_context(self):
+                    self._context = None
+
+                def __call__(self, function_call):
+                    if self._context is None:
+                        return None
+                    return self._context["register"](function_call)
+
+            self._runtime_freeze_exp_formatter = _RuntimeFreezeExpFormatter()
 
         # C++/NEST API printers
         self._type_symbol_printer = NESTCppTypeSymbolPrinter()
         self._nest_variable_printer = NESTVariablePrinter(expression_printer=None, with_origin=True,
                                                           with_vector_parameter=True)
-        self._nest_function_call_printer = NESTCppFunctionCallPrinter(None, exp_function=exp_function)
-        self._nest_function_call_printer_no_origin = NESTCppFunctionCallPrinter(None, exp_function=exp_function)
+        self._nest_function_call_printer = NESTCppFunctionCallPrinter(
+            None, exp_function=exp_function, exp_formatter=self._runtime_freeze_exp_formatter)
+        self._nest_function_call_printer_no_origin = NESTCppFunctionCallPrinter(
+            None, exp_function=exp_function, exp_formatter=self._runtime_freeze_exp_formatter)
 
         self._printer = CppExpressionPrinter(
             simple_expression_printer=CppSimpleExpressionPrinter(variable_printer=self._nest_variable_printer,
@@ -205,7 +232,8 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
             enforce_getter=False)
         self._nest_function_call_printer_no_origin_propagator = NESTCppFunctionCallPrinter(
             None,
-            exp_function=propagator_exp_function)
+            exp_function=propagator_exp_function,
+            exp_formatter=self._runtime_freeze_exp_formatter)
         self._printer_no_origin_propagator = CppExpressionPrinter(
             simple_expression_printer=CppSimpleExpressionPrinter(
                 variable_printer=self._nest_variable_printer_no_origin_propagator,
@@ -213,6 +241,22 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
                 function_call_printer=self._nest_function_call_printer_no_origin_propagator))
         self._nest_variable_printer_no_origin_propagator._expression_printer = self._printer_no_origin_propagator
         self._nest_function_call_printer_no_origin_propagator._expression_printer = self._printer_no_origin_propagator
+
+        self._nest_variable_printer_no_origin_exact = NESTVariablePrinter(
+            None,
+            with_origin=False,
+            with_vector_parameter=True,
+            enforce_getter=False)
+        self._nest_function_call_printer_no_origin_exact = NESTCppFunctionCallPrinter(
+            None,
+            exp_function=exp_function)
+        self._printer_no_origin_exact = CppExpressionPrinter(
+            simple_expression_printer=CppSimpleExpressionPrinter(
+                variable_printer=self._nest_variable_printer_no_origin_exact,
+                constant_printer=self._constant_printer,
+                function_call_printer=self._nest_function_call_printer_no_origin_exact))
+        self._nest_variable_printer_no_origin_exact._expression_printer = self._printer_no_origin_exact
+        self._nest_function_call_printer_no_origin_exact._expression_printer = self._printer_no_origin_exact
 
         # GSL printers
         self._gsl_variable_printer = GSLVariablePrinter(None)
@@ -245,7 +289,14 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
             raise ValueError("`fp_precision` must be either 'single' or 'double'.")
         if "use_fastexp" in options and not isinstance(options["use_fastexp"], bool):
             raise ValueError("`use_fastexp` must be a bool.")
-        self._nest_code_generator.set_options(options)
+        if "single_precision_propagator_exp_mode" in options and options["single_precision_propagator_exp_mode"] not in ["bounded", "plain"]:
+            raise ValueError("`single_precision_propagator_exp_mode` must be either 'bounded' or 'plain'.")
+        if "with_profiling" in options and not isinstance(options["with_profiling"], bool):
+            raise ValueError("`with_profiling` must be a bool.")
+        if "freeze_exp_mode" in options and options["freeze_exp_mode"] not in ["none", "freeze_init"]:
+            raise ValueError("`freeze_exp_mode` must be either 'none' or 'freeze_init'.")
+        if hasattr(self, "_nest_code_generator"):
+            self._nest_code_generator.set_options(options)
         ret = super().set_options(options)
         self.setup_template_env()
         self.setup_printers()
@@ -758,6 +809,7 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
         render_printer = FinalFloatSuffixPrinter(self._nest_printer)
         render_printer_no_origin = FinalFloatSuffixPrinter(self._printer_no_origin)
         render_printer_no_origin_propagator = FinalFloatSuffixPrinter(self._printer_no_origin_propagator)
+        render_printer_no_origin_exact = FinalFloatSuffixPrinter(self._printer_no_origin_exact)
 
         # printers
         namespace["printer"] = render_printer
@@ -783,9 +835,115 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
 
         vector_printer = VectorPrinter(neuron, render_printer_no_origin)
         vector_printer_propagator = VectorPrinter(neuron, render_printer_no_origin_propagator)
+        vector_printer_exact = VectorPrinter(neuron, render_printer_no_origin_exact)
+
+        class RuntimeFreezeSiteRegistry:
+            def __init__(self, exact_printer, propagator_printer):
+                self._sites_by_group = {}
+                self._site_by_key = {}
+                self._exact_printer = exact_printer
+                self._propagator_printer = propagator_printer
+
+            def _canonical_key(self, function_call, index, black_list, is_propagator):
+                printer = self._propagator_printer if is_propagator else self._exact_printer
+                factory = ASTVectorParameterSetterAndPrinterFactory(neuron, printer)
+                index_printer = factory.create_ast_vector_parameter_setter_and_printer(index, list(black_list))
+                return index_printer.print(function_call)
+
+            def register(self, group, function_call, index, black_list, is_propagator):
+                key = self._canonical_key(function_call, index, black_list, is_propagator)
+                sites_for_group = self._site_by_key.setdefault(group, {})
+                if key in sites_for_group:
+                    return sites_for_group[key]["name"]
+                entry = {
+                    "name": f"__frozen_exp_site_{len(sites_for_group)}",
+                    "function_call": function_call,
+                    "index": index,
+                    "black_list": list(black_list),
+                    "is_propagator": is_propagator,
+                }
+                sites_for_group[key] = entry
+                self._sites_by_group.setdefault(group, []).append(entry)
+                return entry["name"]
+
+            def get_sites(self, group):
+                return self._sites_by_group.get(group, [])
+
+        runtime_freeze_site_registry = RuntimeFreezeSiteRegistry(
+            render_printer_no_origin_exact,
+            render_printer_no_origin_exact,
+        )
+
+        class RuntimeVectorPrinter(VectorPrinter):
+            def __init__(self, neuron, printer, exp_formatter, registry, is_propagator):
+                super().__init__(neuron, printer)
+                self._exp_formatter = exp_formatter
+                self._registry = registry
+                self._is_propagator = is_propagator
+                self._function_call_printer = printer._simple_expression_printer._function_call_printer
+
+            def _set_context(self, group, index, black_list):
+                if self._exp_formatter is None:
+                    return
+
+                def _register(function_call):
+                    site_name = self._registry.register(
+                        group,
+                        function_call,
+                        index,
+                        tuple(black_list),
+                        self._is_propagator,
+                    )
+                    return site_name + "[" + index + "]"
+
+                self._exp_formatter.set_context({"register": _register})
+
+            def _clear_context(self):
+                if self._exp_formatter is not None:
+                    self._exp_formatter.clear_context()
+
+            def print(self, expression, group, index="i", black_list=[]):
+                self._set_context(group, index, black_list)
+                try:
+                    return super().print(expression, index=index, black_list=black_list)
+                finally:
+                    self._clear_context()
+
+            def prepare(self, expression, group, index="i", black_list=[]):
+                self.print(expression, group, index=index, black_list=black_list)
+                return ""
+
+            def get_sites(self, group):
+                return self._registry.get_sites(group)
+
+            def context_printer(self, group, index="i", black_list=[]):
+                self._set_context(group, index, black_list)
+                return self.printer(index=index, black_list=black_list)
+
+            def clear_context(self):
+                self._clear_context()
+
+        runtime_vector_printer = RuntimeVectorPrinter(
+            neuron,
+            render_printer_no_origin,
+            self._runtime_freeze_exp_formatter,
+            runtime_freeze_site_registry,
+            False,
+        )
+        runtime_vector_printer_propagator = RuntimeVectorPrinter(
+            neuron,
+            render_printer_no_origin_propagator,
+            self._runtime_freeze_exp_formatter,
+            runtime_freeze_site_registry,
+            True,
+        )
 
         namespace["vector_printer"] = vector_printer
         namespace["vector_printer_propagator"] = vector_printer_propagator
+        namespace["vector_printer_exact"] = vector_printer_exact
+        namespace["runtime_vector_printer"] = runtime_vector_printer
+        namespace["runtime_vector_printer_propagator"] = runtime_vector_printer_propagator
+        namespace["freeze_group"] = lambda kind, name: f"{kind}:{name}"
 
         # NESTML syntax keywords
         namespace["PyNestMLLexer"] = {}
@@ -797,6 +955,9 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
         namespace["nest_version"] = self.get_option("nest_version")
         namespace["fp_precision"] = self.get_option("fp_precision")
         namespace["use_fastexp"] = self.get_option("use_fastexp")
+        namespace["single_precision_propagator_exp_mode"] = self.get_option("single_precision_propagator_exp_mode")
+        namespace["with_profiling"] = self.get_option("with_profiling")
+        namespace["freeze_exp_mode"] = self.get_option("freeze_exp_mode")
 
         namespace["neuronName"] = neuron.get_name()
         namespace["neuron"] = neuron

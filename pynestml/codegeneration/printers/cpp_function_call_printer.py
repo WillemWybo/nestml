@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with NEST.  If not, see <http://www.gnu.org/licenses/>.
 
-from typing import Tuple
+from typing import Callable, Optional, Tuple
 
 import re
 
@@ -39,9 +39,14 @@ class CppFunctionCallPrinter(FunctionCallPrinter):
     Printer for ASTFunctionCall in C++ syntax.
     """
 
-    def __init__(self, expression_printer=None, exp_function: str = "std::exp"):
+    def __init__(
+            self,
+            expression_printer=None,
+            exp_function: str = "std::exp",
+            exp_formatter: Optional[Callable[[ASTFunctionCall], Optional[str]]] = None):
         super().__init__(expression_printer)
         self._exp_function = exp_function
+        self._exp_formatter = exp_formatter
 
     def print(self, node: ASTNode) -> str:
         assert isinstance(node, ASTFunctionCall)
@@ -104,6 +109,10 @@ class CppFunctionCallPrinter(FunctionCallPrinter):
             return 'std::abs({!s})'
 
         if function_name == PredefinedFunctions.EXP:
+            if self._exp_formatter is not None:
+                formatted = self._exp_formatter(function_call)
+                if formatted is not None:
+                    return formatted
             return self._exp_function + '({!s})'
 
         if function_name == PredefinedFunctions.LN:

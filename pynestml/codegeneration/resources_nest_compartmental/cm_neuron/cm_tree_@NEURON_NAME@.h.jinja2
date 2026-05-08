@@ -72,6 +72,9 @@ along with NEST.  If not, see <http://www.gnu.org/licenses/>.
 #include "dictutils.h"
 
 #include <functional>
+{%- if with_profiling %}
+#include <chrono>
+{%- endif %}
 
 
 namespace nest
@@ -216,6 +219,10 @@ private:
   std::vector< std::size_t > child_indices_;
   std::vector< {{ cm_scalar_t }} > sweep_g_out_;
   std::vector< {{ cm_scalar_t }} > sweep_f_out_;
+  {%- if with_profiling %}
+  {{ cm_scalar_t }} profile_construct_matrix_ms_ = 0.0;
+  {{ cm_scalar_t }} profile_solve_matrix_ms_ = 0.0;
+  {%- endif %}
 
 public:
   // constructor, destructor
