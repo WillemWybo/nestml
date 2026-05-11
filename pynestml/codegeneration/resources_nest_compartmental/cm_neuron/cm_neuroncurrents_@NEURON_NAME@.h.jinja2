@@ -93,6 +93,23 @@ private:
         {%- endif %}
     {%- endfor %}
 
+    {%- if with_detailed_recordables %}
+    // detailed recordables for runtime helper functions
+    {%- for function in channel_info["Functions"] %}
+        {%- set function_name = function.get_name() %}
+        {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+    std::vector< {{ cm_scalar_t }} > {{ function_name }}_recordable = {};
+        {%- endif %}
+    {%- endfor %}
+
+    // detailed recordables for runtime ODE propagators
+    {%- for ode_variable, ode_info in channel_info["ODEs"].items() %}
+        {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+    std::vector< {{ cm_scalar_t }} > {{ propagator }}_recordable = {};
+        {%- endfor %}
+    {%- endfor %}
+    {%- endif %}
+
       // propagators, initialized via pre_run_hook() or calibrate()
   {%- for convolution, convolution_info in channel_info["convolutions"].items() %}
   {%- for state_variable_name, state_variable_info in convolution_info["analytic_solution"]["propagators"].items()%}
@@ -223,6 +240,23 @@ private:
     std::vector< {{ cm_scalar_t }} > {{ variable }} = {};
         {%- endif %}
     {%- endfor %}
+
+    {%- if with_detailed_recordables %}
+    // detailed recordables for runtime helper functions
+    {%- for function in concentration_info["Functions"] %}
+        {%- set function_name = function.get_name() %}
+        {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+    std::vector< {{ cm_scalar_t }} > {{ function_name }}_recordable = {};
+        {%- endif %}
+    {%- endfor %}
+
+    // detailed recordables for runtime ODE propagators
+    {%- for ode_variable, ode_info in concentration_info["ODEs"].items() %}
+        {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+    std::vector< {{ cm_scalar_t }} > {{ propagator }}_recordable = {};
+        {%- endfor %}
+    {%- endfor %}
+    {%- endif %}
 
       // propagators, initialized via pre_run_hook() or calibrate()
   {%- for convolution, convolution_info in concentration_info["convolutions"].items() %}
@@ -389,6 +423,23 @@ private:
   {%- if freeze_exp_mode == "freeze_init" %}
   {%- for site in runtime_vector_printer.get_sites(runtime_group) %}
   std::vector< {{ cm_scalar_t }} > {{ site.name }} = {};
+  {%- endfor %}
+  {%- endif %}
+
+  {%- if with_detailed_recordables %}
+  // detailed recordables for runtime helper functions
+  {%- for function in receptor_info["Functions"] %}
+      {%- set function_name = function.get_name() %}
+      {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+  std::vector< {{ cm_scalar_t }} > {{ function_name }}_recordable = {};
+      {%- endif %}
+  {%- endfor %}
+
+  // detailed recordables for runtime ODE propagators
+  {%- for ode_variable, ode_info in receptor_info["ODEs"].items() %}
+      {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  std::vector< {{ cm_scalar_t }} > {{ propagator }}_recordable = {};
+      {%- endfor %}
   {%- endfor %}
   {%- endif %}
 
@@ -570,6 +621,30 @@ private:
   {%- if freeze_exp_mode == "freeze_init" %}
   {%- for site in runtime_vector_printer.get_sites(runtime_group) %}
   std::vector< {{ cm_scalar_t }} > {{ site.name }} = {};
+  {%- endfor %}
+  {%- endif %}
+
+  {%- if with_detailed_recordables %}
+  // detailed recordables for runtime helper functions
+  {%- for function in receptor_info["Functions"] %}
+      {%- set function_name = function.get_name() %}
+      {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+  std::vector< {{ cm_scalar_t }} > {{ function_name }}_recordable = {};
+      {%- endif %}
+  {%- endfor %}
+
+  // detailed recordables for runtime receptor ODE propagators
+  {%- for ode_variable, ode_info in receptor_info["ODEs"].items() %}
+      {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  std::vector< {{ cm_scalar_t }} > {{ propagator }}_recordable = {};
+      {%- endfor %}
+  {%- endfor %}
+
+  // detailed recordables for runtime synapse ODE propagators
+  {%- for ode_variable, ode_info in synapse_info["ODEs"].items() %}
+      {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  std::vector< {{ cm_scalar_t }} > {{ propagator }}_recordable = {};
+      {%- endfor %}
   {%- endfor %}
   {%- endif %}
 
@@ -763,6 +838,23 @@ private:
   {%- if freeze_exp_mode == "freeze_init" %}
   {%- for site in runtime_vector_printer.get_sites(runtime_group) %}
   std::vector< {{ cm_scalar_t }} > {{ site.name }} = {};
+  {%- endfor %}
+  {%- endif %}
+
+  {%- if with_detailed_recordables %}
+  // detailed recordables for runtime helper functions
+  {%- for function in continuous_info["Functions"] %}
+      {%- set function_name = function.get_name() %}
+      {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+  std::vector< {{ cm_scalar_t }} > {{ function_name }}_recordable = {};
+      {%- endif %}
+  {%- endfor %}
+
+  // detailed recordables for runtime ODE propagators
+  {%- for ode_variable, ode_info in continuous_info["ODEs"].items() %}
+      {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  std::vector< {{ cm_scalar_t }} > {{ propagator }}_recordable = {};
+      {%- endfor %}
   {%- endfor %}
   {%- endif %}
 

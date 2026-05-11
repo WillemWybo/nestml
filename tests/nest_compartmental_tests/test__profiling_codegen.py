@@ -47,6 +47,9 @@ def test_profiling_codegen_option_validation():
     with pytest.raises(ValueError, match="single_precision_propagator_exp_mode"):
         codegen.set_options({"single_precision_propagator_exp_mode": "fast"})
 
+    with pytest.raises(ValueError, match="with_detailed_recordables"):
+        codegen.set_options({"with_detailed_recordables": "yes"})
+
 
 def test_profiling_codegen_emits_recordables_and_frozen_exp(tmp_path, monkeypatch):
     monkeypatch.setattr(frontend, "builder_from_target_name", lambda *args, **kwargs: (None, {}))
@@ -157,3 +160,37 @@ def test_single_precision_propagator_exp_mode_codegen(tmp_path, monkeypatch):
     ).read_text()
     assert "cm_fast_propagator_exp" in fastexp_cpp
     assert "bounded_propagator_expf" not in fastexp_cpp
+
+
+def test_detailed_recordables_codegen(tmp_path, monkeypatch):
+    monkeypatch.setattr(frontend, "builder_from_target_name", lambda *args, **kwargs: (None, {}))
+
+    target_path = tmp_path / "detailed"
+    generate_nest_compartmental_target(
+        input_path=_resource_path("recordable_inline_test.nestml"),
+        target_path=str(target_path),
+        module_name="detailed_recordables_module",
+        suffix="_nestml",
+        logging_level="INFO",
+        codegen_opts={
+            "nest_version": "v3.4",
+            "with_detailed_recordables": True,
+        },
+    )
+
+    neuroncurrents_h = (
+        target_path / "cm_neuroncurrents_cm_default_nestml.h"
+    ).read_text()
+    neuroncurrents_cpp = (
+        target_path / "cm_neuroncurrents_cm_default_nestml.cpp"
+    ).read_text()
+
+    assert "m_inf_Na_recordable" in neuroncurrents_h
+    assert "h_inf_Na_recordable" in neuroncurrents_h
+    assert "tau_m_Na_recordable" in neuroncurrents_h
+    assert "tau_h_Na_recordable" in neuroncurrents_h
+    assert "__P__h_Na__h_Na_recordable" in neuroncurrents_h
+    assert "__P__m_Na__m_Na_recordable" in neuroncurrents_h
+    assert 'Name( std::string("m_inf_Na") + std::to_string(compartment_idx))' in neuroncurrents_cpp
+    assert 'Name( std::string("tau_h_Na") + std::to_string(compartment_idx))' in neuroncurrents_cpp
+    assert "__P__h_Na__h_Na_recordable[i] = __P__h_Na__h_Na;" in neuroncurrents_cpp

@@ -434,6 +434,10 @@ def generate_nest_compartmental_target(input_path: Union[str, Sequence[str]], ta
         - ``with_profiling``: bool (default: ``False``). If ``True``, generated
           models expose cumulative profiling recordables for matrix assembly,
           Hines solves, and current-evaluation steps.
+        - ``with_detailed_recordables``: bool (default: ``False``). If
+          ``True``, generated models expose additional multimeter recordables
+          for runtime propagators and pure helper functions such as ``*_inf_*``
+          and ``tau_*`` values.
         - ``freeze_exp_mode``: ``"none"`` or ``"freeze_init"`` (default:
           ``"none"``). ``"freeze_init"`` replaces runtime ``exp`` evaluations
           in ``f_numstep()`` with values computed once in ``pre_run_hook()``

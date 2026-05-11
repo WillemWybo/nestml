@@ -113,6 +113,7 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
         "use_fastexp": False,
         "single_precision_propagator_exp_mode": "bounded",
         "with_profiling": False,
+        "with_detailed_recordables": False,
         "freeze_exp_mode": "none",
         "neuron_parent_class": "ArchivingNode",
         "neuron_parent_class_include": "archiving_node.h",
@@ -293,6 +294,8 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
             raise ValueError("`single_precision_propagator_exp_mode` must be either 'bounded' or 'plain'.")
         if "with_profiling" in options and not isinstance(options["with_profiling"], bool):
             raise ValueError("`with_profiling` must be a bool.")
+        if "with_detailed_recordables" in options and not isinstance(options["with_detailed_recordables"], bool):
+            raise ValueError("`with_detailed_recordables` must be a bool.")
         if "freeze_exp_mode" in options and options["freeze_exp_mode"] not in ["none", "freeze_init"]:
             raise ValueError("`freeze_exp_mode` must be either 'none' or 'freeze_init'.")
         if hasattr(self, "_nest_code_generator"):
@@ -957,6 +960,7 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
         namespace["use_fastexp"] = self.get_option("use_fastexp")
         namespace["single_precision_propagator_exp_mode"] = self.get_option("single_precision_propagator_exp_mode")
         namespace["with_profiling"] = self.get_option("with_profiling")
+        namespace["with_detailed_recordables"] = self.get_option("with_detailed_recordables")
         namespace["freeze_exp_mode"] = self.get_option("freeze_exp_mode")
 
         namespace["neuronName"] = neuron.get_name()

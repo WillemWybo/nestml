@@ -133,6 +133,14 @@ inline {{ function_declaration.FunctionDeclaration(function, "nest::"~ion_channe
 {% endwith %}
 {%- endmacro %}
 
+{% macro render_detailed_function_call(function) -%}
+{{ function.get_name() }}(
+{%- for param in function.get_parameters() -%}
+{{ param.get_name() }}{%- if not loop.last %}, {% endif -%}
+{%- endfor -%}
+)
+{%- endmacro %}
+
 {% macro render_vectorized_channel_function(function, ion_channel_name) -%}
 {%- with %}
 {{ vectorized_function_declaration.FunctionDeclaration(function, "nest::"~ion_channel_name~cm_unique_suffix~"::", true) }}
@@ -406,6 +414,19 @@ void
 nest::{{ion_channel_name}}{{cm_unique_suffix}}::append_recordables(std::map< Name, {{ cm_scalar_t }}* >* recordables,
                                                const long compartment_idx)
 {
+  {%- if with_detailed_recordables %}
+  {%- for function in channel_info["Functions"] %}
+  {%- set function_name = function.get_name() %}
+  {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+  if ( {{ function_name }}_recordable.size() != neuron_{{ ion_channel_name }}_channel_count ) {{ function_name }}_recordable.resize( neuron_{{ ion_channel_name }}_channel_count, 0 );
+  {%- endif %}
+  {%- endfor %}
+  {%- for ode_variable, ode_info in channel_info["ODEs"].items() %}
+  {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  if ( {{ propagator }}_recordable.size() != neuron_{{ ion_channel_name }}_channel_count ) {{ propagator }}_recordable.resize( neuron_{{ ion_channel_name }}_channel_count, 0 );
+  {%- endfor %}
+  {%- endfor %}
+  {%- endif %}
   // add state variables to recordables map
   bool found_rec = false;
   {%- for pure_variable_name, variable_info in channel_info["States"].items() %}
@@ -440,6 +461,45 @@ nest::{{ion_channel_name}}{{cm_unique_suffix}}::append_recordables(std::map< Nam
       }
   }
   if(!found_rec) ( *recordables )[ Name( std::string("{{ion_channel_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- if with_detailed_recordables %}
+  {%- for convolution, convolution_info in channel_info["convolutions"].items() %}
+  {%- for state_variable_name, state_variable_info in convolution_info["analytic_solution"]["propagators"].items() %}
+  found_rec = false;
+  for(size_t chan_id = 0; chan_id < neuron_{{ ion_channel_name }}_channel_count; chan_id++){
+      if(compartment_association[chan_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{state_variable_name}}") + std::to_string(compartment_idx))] = &{{state_variable_name}}[chan_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{state_variable_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endfor %}
+  {%- endfor %}
+  {%- for ode_variable, ode_info in channel_info["ODEs"].items() %}
+  {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  found_rec = false;
+  for(size_t chan_id = 0; chan_id < neuron_{{ ion_channel_name }}_channel_count; chan_id++){
+      if(compartment_association[chan_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{propagator}}") + std::to_string(compartment_idx))] = &{{ propagator }}_recordable[chan_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{propagator}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endfor %}
+  {%- endfor %}
+  {%- for function in channel_info["Functions"] %}
+  {%- set function_name = function.get_name() %}
+  {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+  found_rec = false;
+  for(size_t chan_id = 0; chan_id < neuron_{{ ion_channel_name }}_channel_count; chan_id++){
+      if(compartment_association[chan_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{function_name}}") + std::to_string(compartment_idx))] = &{{ function_name }}_recordable[chan_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{function_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endif %}
+  {%- endfor %}
+  {%- endif %}
 }
 
 {%- set runtime_group = freeze_group("channel", ion_channel_name) %}
@@ -539,6 +599,19 @@ void nest::{{ion_channel_name}}{{cm_unique_suffix}}::f_numstep(const std::vector
                         {% endif %}{% for inline in channel_info["Dependencies"]["continuous"] %}, const std::vector< {{ cm_scalar_t }} >& shared_{{inline.variable_name}}{% endfor %}
                         , std::vector< {{ cm_scalar_t }} >& i_val, std::vector< {{ cm_scalar_t }} >& g_val)
 {
+    {%- if with_detailed_recordables %}
+    {%- for function in channel_info["Functions"] %}
+    {%- set function_name = function.get_name() %}
+    {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+    if ( {{ function_name }}_recordable.size() != neuron_{{ ion_channel_name }}_channel_count ) {{ function_name }}_recordable.resize( neuron_{{ ion_channel_name }}_channel_count, 0 );
+    {%- endif %}
+    {%- endfor %}
+    {%- for ode_variable, ode_info in channel_info["ODEs"].items() %}
+    {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+    if ( {{ propagator }}_recordable.size() != neuron_{{ ion_channel_name }}_channel_count ) {{ propagator }}_recordable.resize( neuron_{{ ion_channel_name }}_channel_count, 0 );
+    {%- endfor %}
+    {%- endfor %}
+    {%- endif %}
         {% if "time_resolution_var" in channel_info %}
     {{ cm_scalar_t }} {{ printer_no_origin.print(channel_info["time_resolution_var"]) }} = Time::get_resolution().get_ms();
     {% endif %}
@@ -615,6 +688,14 @@ void nest::{{ion_channel_name}}{{cm_unique_suffix}}::f_numstep(const std::vector
         {%- for replacement, expression in channel_info["cse_body_replacements"].items() %}
             {{ cm_scalar_t }} {{ replacement }} = {{ runtime_vector_printer.print(expression, runtime_group, "i", non_vec_vars) }};
         {%- endfor %}
+        {%- if with_detailed_recordables %}
+        {%- for function in channel_info["Functions"] %}
+        {%- set function_name = function.get_name() %}
+        {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function) }};
+        {%- endif %}
+        {%- endfor %}
+        {%- endif %}
 
         {%- for variable_info in channel_info["SecondaryInlineExpressions"] %}
         {%- if variable_info.is_recordable %}
@@ -634,6 +715,9 @@ void nest::{{ion_channel_name}}{{cm_unique_suffix}}::f_numstep(const std::vector
         {%- for ode_variable, ode_info in channel_info["ODEs"].items() %}
             {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
             {{ cm_scalar_t }} {{ propagator }} = {{ runtime_vector_printer_propagator.print(propagator_info["init_expression"], runtime_group, "i", non_vec_vars) }};
+            {%- if with_detailed_recordables %}
+            {{ propagator }}_recordable[i] = {{ propagator }};
+            {%- endif %}
             {%- endfor %}
             {%- for state, state_solution_info in ode_info["transformed_solutions"][0]["states"].items() %}
             {{state}}[i] = {{ runtime_vector_printer.print(state_solution_info["update_expression"], runtime_group, "i", non_vec_vars) }};
@@ -947,6 +1031,19 @@ void
 nest::{{ concentration_name }}{{cm_unique_suffix}}::append_recordables(std::map< Name, {{ cm_scalar_t }}* >* recordables,
                                                const long compartment_idx)
 {
+  {%- if with_detailed_recordables %}
+  {%- for function in concentration_info["Functions"] %}
+  {%- set function_name = function.get_name() %}
+  {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+  if ( {{ function_name }}_recordable.size() != neuron_{{ concentration_name }}_concentration_count ) {{ function_name }}_recordable.resize( neuron_{{ concentration_name }}_concentration_count, 0 );
+  {%- endif %}
+  {%- endfor %}
+  {%- for ode_variable, ode_info in concentration_info["ODEs"].items() %}
+  {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  if ( {{ propagator }}_recordable.size() != neuron_{{ concentration_name }}_concentration_count ) {{ propagator }}_recordable.resize( neuron_{{ concentration_name }}_concentration_count, 0 );
+  {%- endfor %}
+  {%- endfor %}
+  {%- endif %}
   // add state variables to recordables map
   bool found_rec = false;
 
@@ -984,6 +1081,45 @@ nest::{{ concentration_name }}{{cm_unique_suffix}}::append_recordables(std::map<
       }
     }
     if(!found_rec) ( *recordables )[ Name( std::string("{{concentration_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- if with_detailed_recordables %}
+  {%- for convolution, convolution_info in concentration_info["convolutions"].items() %}
+  {%- for state_variable_name, state_variable_info in convolution_info["analytic_solution"]["propagators"].items() %}
+  found_rec = false;
+  for(size_t conc_id = 0; conc_id < neuron_{{ concentration_name }}_concentration_count; conc_id++){
+      if(compartment_association[conc_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{state_variable_name}}") + std::to_string(compartment_idx))] = &{{state_variable_name}}[conc_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{state_variable_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endfor %}
+  {%- endfor %}
+  {%- for ode_variable, ode_info in concentration_info["ODEs"].items() %}
+  {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  found_rec = false;
+  for(size_t conc_id = 0; conc_id < neuron_{{ concentration_name }}_concentration_count; conc_id++){
+      if(compartment_association[conc_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{propagator}}") + std::to_string(compartment_idx))] = &{{ propagator }}_recordable[conc_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{propagator}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endfor %}
+  {%- endfor %}
+  {%- for function in concentration_info["Functions"] %}
+  {%- set function_name = function.get_name() %}
+  {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+  found_rec = false;
+  for(size_t conc_id = 0; conc_id < neuron_{{ concentration_name }}_concentration_count; conc_id++){
+      if(compartment_association[conc_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{function_name}}") + std::to_string(compartment_idx))] = &{{ function_name }}_recordable[conc_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{function_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endif %}
+  {%- endfor %}
+  {%- endif %}
 }
 
 {%- set runtime_group = freeze_group("concentration", concentration_name) %}
@@ -1075,6 +1211,19 @@ void nest::{{ concentration_name }}{{cm_unique_suffix}}::f_numstep(const std::ve
                         {% endif %}{% for inline in concentration_info["Dependencies"]["channels"] %}, const std::vector< {{ cm_scalar_t }} >& shared_{{inline.variable_name}}{% endfor %}{% if concentration_info["Dependencies"]["continuous"]|length %}
                         {% endif %}{% for inline in concentration_info["Dependencies"]["continuous"] %}, const std::vector< {{ cm_scalar_t }} >& shared_{{inline.variable_name}}{% endfor %})
 {
+    {%- if with_detailed_recordables %}
+    {%- for function in concentration_info["Functions"] %}
+    {%- set function_name = function.get_name() %}
+    {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+    if ( {{ function_name }}_recordable.size() != neuron_{{ concentration_name }}_concentration_count ) {{ function_name }}_recordable.resize( neuron_{{ concentration_name }}_concentration_count, 0 );
+    {%- endif %}
+    {%- endfor %}
+    {%- for ode_variable, ode_info in concentration_info["ODEs"].items() %}
+    {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+    if ( {{ propagator }}_recordable.size() != neuron_{{ concentration_name }}_concentration_count ) {{ propagator }}_recordable.resize( neuron_{{ concentration_name }}_concentration_count, 0 );
+    {%- endfor %}
+    {%- endfor %}
+    {%- endif %}
     {% if "time_resolution_var" in concentration_info %}
         {{ cm_scalar_t }} {{ printer_no_origin.print(concentration_info["time_resolution_var"]) }} = Time::get_resolution().get_ms();
     {% endif %}
@@ -1124,6 +1273,14 @@ void nest::{{ concentration_name }}{{cm_unique_suffix}}::f_numstep(const std::ve
         {%- for replacement, expression in concentration_info["cse_body_replacements"].items() %}
             {{ cm_scalar_t }} {{ replacement }} = {{ runtime_vector_printer.print(expression, runtime_group, "i", non_vec_vars) }};
         {%- endfor %}
+        {%- if with_detailed_recordables %}
+        {%- for function in concentration_info["Functions"] %}
+        {%- set function_name = function.get_name() %}
+        {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function) }};
+        {%- endif %}
+        {%- endfor %}
+        {%- endif %}
 
         {%- for variable_info in concentration_info["SecondaryInlineExpressions"] %}
         {%- if variable_info.is_recordable %}
@@ -1143,6 +1300,9 @@ void nest::{{ concentration_name }}{{cm_unique_suffix}}::f_numstep(const std::ve
         {%- for ode_variable, ode_info in concentration_info["ODEs"].items() %}
             {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
             {{ cm_scalar_t }} {{ propagator }} = {{ runtime_vector_printer_propagator.print(propagator_info["init_expression"], runtime_group, "i", non_vec_vars) }};
+            {%- if with_detailed_recordables %}
+            {{ propagator }}_recordable[i] = {{ propagator }};
+            {%- endif %}
             {%- endfor %}
             {%- for state, state_solution_info in ode_info["transformed_solutions"][0]["states"].items() %}
             {{state}}[i] = {{ runtime_vector_printer.print(state_solution_info["update_expression"], runtime_group, "i", non_vec_vars) }};
@@ -1367,6 +1527,20 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}::new_receptor(std::size_t comp_
 void
 nest::{{receptor_name}}{{cm_unique_suffix}}::append_recordables(std::map< Name, {{ cm_scalar_t }}* >* recordables, const long compartment_idx)
 {
+  {%- if with_detailed_recordables %}
+  {%- for function in receptor_info["Functions"] %}
+  {%- set function_name = function.get_name() %}
+  {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+  if ( {{ function_name }}_recordable.size() != neuron_{{ receptor_name }}_receptor_count ) {{ function_name }}_recordable.resize( neuron_{{ receptor_name }}_receptor_count, 0 );
+  {%- endif %}
+  {%- endfor %}
+  {%- for ode_variable, ode_info in receptor_info["ODEs"].items() %}
+  {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  if ( {{ propagator }}_recordable.size() != neuron_{{ receptor_name }}_receptor_count ) {{ propagator }}_recordable.resize( neuron_{{ receptor_name }}_receptor_count, 0 );
+  {%- endfor %}
+  {%- endfor %}
+  {%- endif %}
+  bool found_rec = false;
   {%- for convolution, convolution_info in receptor_info["convolutions"].items() %}
   for(size_t recs_id = 0; recs_id < neuron_{{ receptor_name }}_receptor_count; recs_id++){
       if(compartment_association[recs_id] == compartment_idx){
@@ -1394,6 +1568,45 @@ nest::{{receptor_name}}{{cm_unique_suffix}}::append_recordables(std::map< Name, 
         ( *recordables )[ Name( "{{receptor_name}}" + std::to_string(rec_idx[recs_id]) )] = &i_tot_{{receptor_name}}[recs_id];
       }
     }
+  {%- if with_detailed_recordables %}
+  {%- for convolution, convolution_info in receptor_info["convolutions"].items() %}
+  {%- for state_variable_name, state_variable_info in convolution_info["analytic_solution"]["propagators"].items() %}
+  found_rec = false;
+  for(size_t recs_id = 0; recs_id < neuron_{{ receptor_name }}_receptor_count; recs_id++){
+      if(compartment_association[recs_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{state_variable_name}}") + std::to_string(compartment_idx))] = &{{state_variable_name}}[recs_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{state_variable_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endfor %}
+  {%- endfor %}
+  {%- for ode_variable, ode_info in receptor_info["ODEs"].items() %}
+  {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  found_rec = false;
+  for(size_t recs_id = 0; recs_id < neuron_{{ receptor_name }}_receptor_count; recs_id++){
+      if(compartment_association[recs_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{propagator}}") + std::to_string(compartment_idx))] = &{{ propagator }}_recordable[recs_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{propagator}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endfor %}
+  {%- endfor %}
+  {%- for function in receptor_info["Functions"] %}
+  {%- set function_name = function.get_name() %}
+  {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+  found_rec = false;
+  for(size_t recs_id = 0; recs_id < neuron_{{ receptor_name }}_receptor_count; recs_id++){
+      if(compartment_association[recs_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{function_name}}") + std::to_string(compartment_idx))] = &{{ function_name }}_recordable[recs_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{function_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endif %}
+  {%- endfor %}
+  {%- endif %}
 }
 
 {%- set runtime_group = freeze_group("receptor", receptor_name) %}
@@ -1502,6 +1715,19 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}::f_numstep(const std::vector< {
                         {% endif %}{% for inline in receptor_info["Dependencies"]["continuous"] %}, const std::vector< {{ cm_scalar_t }} >& shared_{{inline.variable_name}}{% endfor %}
                         , std::vector< {{ cm_scalar_t }} >& i_val, std::vector< {{ cm_scalar_t }} >& g_val)
 {
+    {%- if with_detailed_recordables %}
+    {%- for function in receptor_info["Functions"] %}
+    {%- set function_name = function.get_name() %}
+    {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+    if ( {{ function_name }}_recordable.size() != neuron_{{ receptor_name }}_receptor_count ) {{ function_name }}_recordable.resize( neuron_{{ receptor_name }}_receptor_count, 0 );
+    {%- endif %}
+    {%- endfor %}
+    {%- for ode_variable, ode_info in receptor_info["ODEs"].items() %}
+    {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+    if ( {{ propagator }}_recordable.size() != neuron_{{ receptor_name }}_receptor_count ) {{ propagator }}_recordable.resize( neuron_{{ receptor_name }}_receptor_count, 0 );
+    {%- endfor %}
+    {%- endfor %}
+    {%- endif %}
     {% if receptor_info["ODEs"].items()|length %} {{ cm_scalar_t }} {{ printer_no_origin.print(receptor_info["analytic_helpers"]["__h"]["ASTVariable"]) }} = Time::get_resolution().get_ms(); {% endif %}
 
   for(std::size_t i = 0; i < neuron_{{ receptor_name }}_receptor_count; i++){
@@ -1579,6 +1805,14 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}::f_numstep(const std::vector< {
         {%- for replacement, expression in receptor_info["cse_body_replacements"].items() %}
             {{ cm_scalar_t }} {{ replacement }} = {{ runtime_vector_printer.print(expression, runtime_group, "i", non_vec_vars) }};
         {%- endfor %}
+        {%- if with_detailed_recordables %}
+        {%- for function in receptor_info["Functions"] %}
+        {%- set function_name = function.get_name() %}
+        {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function) }};
+        {%- endif %}
+        {%- endfor %}
+        {%- endif %}
 
         {%- for variable_info in receptor_info["SecondaryInlineExpressions"] %}
         {%- if variable_info.is_recordable %}
@@ -1591,6 +1825,9 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}::f_numstep(const std::vector< {
       {%- for ode_variable, ode_info in receptor_info["ODEs"].items() %}
           {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
       {{ cm_scalar_t }} {{ propagator }} = {{ runtime_vector_printer_propagator.print(propagator_info["init_expression"], runtime_group, "i", non_vec_vars) }};
+          {%- if with_detailed_recordables %}
+      {{ propagator }}_recordable[i] = {{ propagator }};
+          {%- endif %}
           {%- endfor %}
           {%- for state, state_solution_info in ode_info["transformed_solutions"][0]["states"].items() %}
       {{state}}[i] = {{ runtime_vector_printer.print(state_solution_info["update_expression"], runtime_group, "i", non_vec_vars) }};
@@ -1972,6 +2209,25 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}_con_{{synapse_name}}::new_recep
 void
 nest::{{receptor_name}}{{cm_unique_suffix}}_con_{{synapse_name}}::append_recordables(std::map< Name, {{ cm_scalar_t }}* >* recordables, const long compartment_idx)
 {
+  {%- if with_detailed_recordables %}
+  {%- for function in receptor_info["Functions"] %}
+  {%- set function_name = function.get_name() %}
+  {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+  if ( {{ function_name }}_recordable.size() != neuron_{{ receptor_name }}_receptor_count ) {{ function_name }}_recordable.resize( neuron_{{ receptor_name }}_receptor_count, 0 );
+  {%- endif %}
+  {%- endfor %}
+  {%- for ode_variable, ode_info in receptor_info["ODEs"].items() %}
+  {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  if ( {{ propagator }}_recordable.size() != neuron_{{ receptor_name }}_receptor_count ) {{ propagator }}_recordable.resize( neuron_{{ receptor_name }}_receptor_count, 0 );
+  {%- endfor %}
+  {%- endfor %}
+  {%- for ode_variable, ode_info in synapse_info["ODEs"].items() %}
+  {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  if ( {{ propagator }}_recordable.size() != neuron_{{ receptor_name }}_receptor_count ) {{ propagator }}_recordable.resize( neuron_{{ receptor_name }}_receptor_count, 0 );
+  {%- endfor %}
+  {%- endfor %}
+  {%- endif %}
+  bool found_rec = false;
   {%- for convolution, convolution_info in receptor_info["convolutions"].items() %}
   for(size_t recs_id = 0; recs_id < neuron_{{ receptor_name }}_receptor_count; recs_id++){
       if(compartment_association[recs_id] == compartment_idx){
@@ -2016,6 +2272,57 @@ nest::{{receptor_name}}{{cm_unique_suffix}}_con_{{synapse_name}}::append_recorda
       }
     }
   {%- endfor %}
+  {%- if with_detailed_recordables %}
+  {%- for convolution, convolution_info in receptor_info["convolutions"].items() %}
+  {%- for state_variable_name, state_variable_info in convolution_info["analytic_solution"]["propagators"].items() %}
+  found_rec = false;
+  for(size_t recs_id = 0; recs_id < neuron_{{ receptor_name }}_receptor_count; recs_id++){
+      if(compartment_association[recs_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{state_variable_name}}") + std::to_string(compartment_idx))] = &{{state_variable_name}}[recs_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{state_variable_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endfor %}
+  {%- endfor %}
+  {%- for ode_variable, ode_info in receptor_info["ODEs"].items() %}
+  {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  found_rec = false;
+  for(size_t recs_id = 0; recs_id < neuron_{{ receptor_name }}_receptor_count; recs_id++){
+      if(compartment_association[recs_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{propagator}}") + std::to_string(compartment_idx))] = &{{ propagator }}_recordable[recs_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{propagator}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endfor %}
+  {%- endfor %}
+  {%- for ode_variable, ode_info in synapse_info["ODEs"].items() %}
+  {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  found_rec = false;
+  for(size_t recs_id = 0; recs_id < neuron_{{ receptor_name }}_receptor_count; recs_id++){
+      if(compartment_association[recs_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{propagator}}") + std::to_string(compartment_idx))] = &{{ propagator }}_recordable[recs_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{propagator}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endfor %}
+  {%- endfor %}
+  {%- for function in receptor_info["Functions"] %}
+  {%- set function_name = function.get_name() %}
+  {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+  found_rec = false;
+  for(size_t recs_id = 0; recs_id < neuron_{{ receptor_name }}_receptor_count; recs_id++){
+      if(compartment_association[recs_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{function_name}}") + std::to_string(compartment_idx))] = &{{ function_name }}_recordable[recs_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{function_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endif %}
+  {%- endfor %}
+  {%- endif %}
 }
 
 {%- set runtime_group = freeze_group("receptor_synapse", receptor_name ~ "_con_" ~ synapse_name) %}
@@ -2164,6 +2471,24 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}_con_{{synapse_name}}::f_numstep
                         {% endif %}{% for inline in con_in_dep %}, const std::vector< {{ cm_scalar_t }} >& shared_{{inline.variable_name}}{% endfor %}
                         , std::vector< {{ cm_scalar_t }} >& i_val, std::vector< {{ cm_scalar_t }} >& g_val)
 {
+    {%- if with_detailed_recordables %}
+    {%- for function in receptor_info["Functions"] %}
+    {%- set function_name = function.get_name() %}
+    {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+    if ( {{ function_name }}_recordable.size() != neuron_{{ receptor_name }}_receptor_count ) {{ function_name }}_recordable.resize( neuron_{{ receptor_name }}_receptor_count, 0 );
+    {%- endif %}
+    {%- endfor %}
+    {%- for ode_variable, ode_info in receptor_info["ODEs"].items() %}
+    {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+    if ( {{ propagator }}_recordable.size() != neuron_{{ receptor_name }}_receptor_count ) {{ propagator }}_recordable.resize( neuron_{{ receptor_name }}_receptor_count, 0 );
+    {%- endfor %}
+    {%- endfor %}
+    {%- for ode_variable, ode_info in synapse_info["ODEs"].items() %}
+    {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+    if ( {{ propagator }}_recordable.size() != neuron_{{ receptor_name }}_receptor_count ) {{ propagator }}_recordable.resize( neuron_{{ receptor_name }}_receptor_count, 0 );
+    {%- endfor %}
+    {%- endfor %}
+    {%- endif %}
 
     for(std::size_t i = 0; i < neuron_{{ receptor_name }}_receptor_count; i++){
       // get spikes
@@ -2218,6 +2543,9 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}_con_{{synapse_name}}::f_numstep
         {%- for ode_variable, ode_info in synapse_info["ODEs"].items() %}
           {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
       {{ cm_scalar_t }} {{ propagator }} = {{ runtime_vector_printer_propagator.print(propagator_info["init_expression"], runtime_group, "i", non_vec_vars) }};
+          {%- if with_detailed_recordables %}
+      {{ propagator }}_recordable[i] = {{ propagator }};
+          {%- endif %}
           {%- endfor %}
           {%- for state, state_solution_info in ode_info["transformed_solutions"][0]["states"].items() %}
       {{state}}[i] = {{ runtime_vector_printer.print(state_solution_info["update_expression"], runtime_group, "i", non_vec_vars) }};
@@ -2305,6 +2633,14 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}_con_{{synapse_name}}::f_numstep
         {%- for replacement, expression in receptor_info["cse_body_replacements"].items() %}
             {{ cm_scalar_t }} {{ replacement }} = {{ runtime_vector_printer.print(expression, runtime_group, "i", non_vec_vars) }};
         {%- endfor %}
+        {%- if with_detailed_recordables %}
+        {%- for function in receptor_info["Functions"] %}
+        {%- set function_name = function.get_name() %}
+        {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function) }};
+        {%- endif %}
+        {%- endfor %}
+        {%- endif %}
 
         {%- for variable_info in receptor_info["SecondaryInlineExpressions"] %}
         {%- if variable_info.is_recordable %}
@@ -2314,9 +2650,12 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}_con_{{synapse_name}}::f_numstep
         {%- endif %}
         {%- endfor %}
 
-      {%- for ode_variable, ode_info in receptor_info["ODEs"].items() %}
+        {%- for ode_variable, ode_info in receptor_info["ODEs"].items() %}
           {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
-      {{ cm_scalar_t }} {{ propagator }} = {{ runtime_vector_printer_propagator.print(propagator_info["init_expression"], runtime_group, "i", non_vec_vars) }};
+        {{ cm_scalar_t }} {{ propagator }} = {{ runtime_vector_printer_propagator.print(propagator_info["init_expression"], runtime_group, "i", non_vec_vars) }};
+          {%- if with_detailed_recordables %}
+        {{ propagator }}_recordable[i] = {{ propagator }};
+          {%- endif %}
           {%- endfor %}
           {%- for state, state_solution_info in ode_info["transformed_solutions"][0]["states"].items() %}
       {{state}}[i] = {{ runtime_vector_printer.print(state_solution_info["update_expression"], runtime_group, "i", non_vec_vars) }};
@@ -2597,6 +2936,20 @@ void nest::{{continuous_name}}{{cm_unique_suffix}}::new_continuous_input(std::si
 void
 nest::{{continuous_name}}{{cm_unique_suffix}}::append_recordables(std::map< Name, {{ cm_scalar_t }}* >* recordables, const long compartment_idx)
 {
+    {%- if with_detailed_recordables %}
+    {%- for function in continuous_info["Functions"] %}
+    {%- set function_name = function.get_name() %}
+    {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+    if ( {{ function_name }}_recordable.size() != neuron_{{ continuous_name }}_continuous_input_count ) {{ function_name }}_recordable.resize( neuron_{{ continuous_name }}_continuous_input_count, 0 );
+    {%- endif %}
+    {%- endfor %}
+    {%- for ode_variable, ode_info in continuous_info["ODEs"].items() %}
+    {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+    if ( {{ propagator }}_recordable.size() != neuron_{{ continuous_name }}_continuous_input_count ) {{ propagator }}_recordable.resize( neuron_{{ continuous_name }}_continuous_input_count, 0 );
+    {%- endfor %}
+    {%- endfor %}
+    {%- endif %}
+  bool found_rec = false;
     for(size_t con_in_id = 0; con_in_id < neuron_{{ continuous_name }}_continuous_input_count; con_in_id++){
       if(compartment_association[con_in_id] == compartment_idx){
         ( *recordables )[ Name( "{{continuous_name}}" + std::to_string(continuous_idx[con_in_id]))] = &i_tot_{{continuous_name}}[con_in_id];
@@ -2616,6 +2969,45 @@ nest::{{continuous_name}}{{cm_unique_suffix}}::append_recordables(std::map< Name
   if(!found_rec) ( *recordables )[ Name( std::string("{{variable_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
   {%- endif %}
   {%- endfor %}
+  {%- if with_detailed_recordables %}
+  {%- for convolution, convolution_info in continuous_info["convolutions"].items() %}
+  {%- for state_variable_name, state_variable_info in convolution_info["analytic_solution"]["propagators"].items() %}
+  found_rec = false;
+  for(size_t con_in_id = 0; con_in_id < neuron_{{ continuous_name }}_continuous_input_count; con_in_id++){
+      if(compartment_association[con_in_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{state_variable_name}}") + std::to_string(compartment_idx))] = &{{state_variable_name}}[con_in_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{state_variable_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endfor %}
+  {%- endfor %}
+  {%- for ode_variable, ode_info in continuous_info["ODEs"].items() %}
+  {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+  found_rec = false;
+  for(size_t con_in_id = 0; con_in_id < neuron_{{ continuous_name }}_continuous_input_count; con_in_id++){
+      if(compartment_association[con_in_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{propagator}}") + std::to_string(compartment_idx))] = &{{ propagator }}_recordable[con_in_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{propagator}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endfor %}
+  {%- endfor %}
+  {%- for function in continuous_info["Functions"] %}
+  {%- set function_name = function.get_name() %}
+  {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+  found_rec = false;
+  for(size_t con_in_id = 0; con_in_id < neuron_{{ continuous_name }}_continuous_input_count; con_in_id++){
+      if(compartment_association[con_in_id] == compartment_idx){
+        ( *recordables )[ Name( std::string("{{function_name}}") + std::to_string(compartment_idx))] = &{{ function_name }}_recordable[con_in_id];
+        found_rec = true;
+      }
+  }
+  if(!found_rec) ( *recordables )[ Name( std::string("{{function_name}}") + std::to_string(compartment_idx))] = &zero_recordable;
+  {%- endif %}
+  {%- endfor %}
+  {%- endif %}
 }
 
 {%- set runtime_group = freeze_group("continuous", continuous_name) %}
@@ -2725,6 +3117,19 @@ void nest::{{continuous_name}}{{cm_unique_suffix}}::f_numstep(const std::vector<
                         , std::vector< {{ cm_scalar_t }} >& i_val, std::vector< {{ cm_scalar_t }} >& g_val)
 {
 
+    {%- if with_detailed_recordables %}
+    {%- for function in continuous_info["Functions"] %}
+    {%- set function_name = function.get_name() %}
+    {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+    if ( {{ function_name }}_recordable.size() != neuron_{{ continuous_name }}_continuous_input_count ) {{ function_name }}_recordable.resize( neuron_{{ continuous_name }}_continuous_input_count, 0 );
+    {%- endif %}
+    {%- endfor %}
+    {%- for ode_variable, ode_info in continuous_info["ODEs"].items() %}
+    {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
+    if ( {{ propagator }}_recordable.size() != neuron_{{ continuous_name }}_continuous_input_count ) {{ propagator }}_recordable.resize( neuron_{{ continuous_name }}_continuous_input_count, 0 );
+    {%- endfor %}
+    {%- endfor %}
+    {%- endif %}
     {% if "time_resolution_var" in continuous_info %}
     {{ cm_scalar_t }} {{ printer_no_origin.print(continuous_info["time_resolution_var"]) }} = Time::get_resolution().get_ms();
     {% endif %}
@@ -2808,6 +3213,14 @@ void nest::{{continuous_name}}{{cm_unique_suffix}}::f_numstep(const std::vector<
         {%- for replacement, expression in continuous_info["cse_body_replacements"].items() %}
             {{ cm_scalar_t }} {{ replacement }} = {{ runtime_vector_printer.print(expression, runtime_group, "i", non_vec_vars) }};
         {%- endfor %}
+        {%- if with_detailed_recordables %}
+        {%- for function in continuous_info["Functions"] %}
+        {%- set function_name = function.get_name() %}
+        {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
+            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function) }};
+        {%- endif %}
+        {%- endfor %}
+        {%- endif %}
 
         {%- for variable_info in continuous_info["SecondaryInlineExpressions"] %}
         {%- if variable_info.is_recordable %}
@@ -2828,6 +3241,9 @@ void nest::{{continuous_name}}{{cm_unique_suffix}}::f_numstep(const std::vector<
       {%- for ode_variable, ode_info in continuous_info["ODEs"].items() %}
           {%- for propagator, propagator_info in ode_info["transformed_solutions"][0]["propagators"].items() %}
       {{ cm_scalar_t }} {{ propagator }} = {{ runtime_vector_printer_propagator.print(propagator_info["init_expression"], runtime_group, "i", non_vec_vars) }};
+          {%- if with_detailed_recordables %}
+      {{ propagator }}_recordable[i] = {{ propagator }};
+          {%- endif %}
           {%- endfor %}
           {%- for state, state_solution_info in ode_info["transformed_solutions"][0]["states"].items() %}
       {{state}}[i] = {{ runtime_vector_printer.print(state_solution_info["update_expression"], runtime_group, "i", non_vec_vars) }};
