@@ -122,7 +122,7 @@ inline {{ function_declaration.FunctionDeclaration(function, "nest::"~ion_channe
 {% macro render_lambda(function, printer_in) -%}
 {%- with %}
     {%- set printer = printer_in %}
-{{ lambda_declaration.LambdaDeclaration(function) }}
+[[maybe_unused]] {{ lambda_declaration.LambdaDeclaration(function) }}
 {
 {%-   filter indent(2,True) %}
 {%-   with ast = function.get_stmts_body() %}
@@ -133,12 +133,12 @@ inline {{ function_declaration.FunctionDeclaration(function, "nest::"~ion_channe
 {% endwith %}
 {%- endmacro %}
 
-{% macro render_detailed_function_call(function) -%}
-{{ function.get_name() }}(
-{%- for param in function.get_parameters() -%}
-{{ param.get_name() }}{%- if not loop.last %}, {% endif -%}
-{%- endfor -%}
-)
+{% macro render_detailed_function_call(function_name, function_calls, runtime_group, index_name, black_list) -%}
+{%- if function_name in function_calls -%}
+{{ runtime_vector_printer.print(function_calls[function_name], runtime_group, index_name, black_list) }}
+{%- else -%}
+{{ raise('Missing detailed recordable callsite for function ' + function_name) }}
+{%- endif -%}
 {%- endmacro %}
 
 {% macro render_vectorized_channel_function(function, ion_channel_name) -%}
@@ -538,31 +538,31 @@ void calibrate() {
 void nest::{{ion_channel_name}}{{cm_unique_suffix}}::pre_run_hook() {
 {%- endif %}
     {% if "time_resolution_var" in channel_info %}
-    {{ cm_scalar_t }} {{ printer_no_origin.print(channel_info["time_resolution_var"]) }} = Time::get_resolution().get_ms();
+    [[maybe_unused]] {{ cm_scalar_t }} {{ printer_no_origin.print(channel_info["time_resolution_var"]) }} = Time::get_resolution().get_ms();
     {% endif %}
     {%- for function in channel_info["Functions"] %}
     {{render_lambda(function, printer_no_origin)}}
     {%- endfor %}
     {{ resize_frozen_exp_sites(runtime_vector_printer.get_sites(runtime_group), "neuron_" ~ ion_channel_name ~ "_channel_count") }}
     for(std::size_t i = 0; i < neuron_{{ ion_channel_name }}_channel_count; i++){
-    {{ cm_scalar_t }} v_comp = v_comp_chan_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} v_comp = v_comp_chan_[i];
     {%- for ode in channel_info["Dependencies"]["concentrations"] %}
-    {{ cm_scalar_t }} {{ode.lhs.name}} = dep_conc_{{ode.lhs.name}}_chan_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} {{ode.lhs.name}} = dep_conc_{{ode.lhs.name}}_chan_[i];
     {%- endfor %}
     {%- for inline in channel_info["Dependencies"]["receptors"] %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_rec_{{inline.variable_name}}_chan_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_rec_{{inline.variable_name}}_chan_[i];
     {%- endfor %}
     {%- for inline in channel_info["Dependencies"]["channels"] %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_chan_{{inline.variable_name}}_chan_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_chan_{{inline.variable_name}}_chan_[i];
     {%- endfor %}
     {%- for inline in channel_info["Dependencies"]["continuous"] %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_con_in_{{inline.variable_name}}_chan_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_con_in_{{inline.variable_name}}_chan_[i];
     {%- endfor %}
     {%- for replacement, expression in channel_info["cse_function_replacements"].items() %}
-    {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
+    [[maybe_unused]] {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
     {%- endfor %}
     {%- for replacement, expression in channel_info["cse_body_replacements"].items() %}
-    {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
+    [[maybe_unused]] {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
     {%- endfor %}
     {{ assign_frozen_exp_sites(runtime_vector_printer.get_sites(runtime_group), "i", non_vec_vars) }}
                     // set propagators to ode toolbox returned value
@@ -692,7 +692,7 @@ void nest::{{ion_channel_name}}{{cm_unique_suffix}}::f_numstep(const std::vector
         {%- for function in channel_info["Functions"] %}
         {%- set function_name = function.get_name() %}
         {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
-            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function) }};
+            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function_name, channel_info["DetailedRecordableFunctionCalls"], runtime_group, "i", non_vec_vars) }};
         {%- endif %}
         {%- endfor %}
         {%- endif %}
@@ -1156,31 +1156,31 @@ void nest::{{ concentration_name }}{{cm_unique_suffix}}::calibrate() {
 void nest::{{ concentration_name }}{{cm_unique_suffix}}::pre_run_hook() {
 {%- endif %}
     {% if "time_resolution_var" in concentration_info %}
-    {{ cm_scalar_t }} {{ printer_no_origin.print(concentration_info["time_resolution_var"]) }} = Time::get_resolution().get_ms();
+    [[maybe_unused]] {{ cm_scalar_t }} {{ printer_no_origin.print(concentration_info["time_resolution_var"]) }} = Time::get_resolution().get_ms();
     {% endif %}
     {%- for function in concentration_info["Functions"] %}
     {{render_lambda(function, printer_no_origin)}}
     {%- endfor %}
     {{ resize_frozen_exp_sites(runtime_vector_printer.get_sites(runtime_group), "neuron_" ~ concentration_name ~ "_concentration_count") }}
     for(std::size_t concentration_id = 0; concentration_id < neuron_{{ concentration_name }}_concentration_count; concentration_id++){
-    {{ cm_scalar_t }} v_comp = v_comp_conc_[concentration_id];
+    [[maybe_unused]] {{ cm_scalar_t }} v_comp = v_comp_conc_[concentration_id];
     {%- for ode in concentration_info["Dependencies"]["concentrations"] %}
-    {{ cm_scalar_t }} {{ode.lhs.name}} = dep_conc_{{ode.lhs.name}}_conc_[concentration_id];
+    [[maybe_unused]] {{ cm_scalar_t }} {{ode.lhs.name}} = dep_conc_{{ode.lhs.name}}_conc_[concentration_id];
     {%- endfor %}
     {%- for inline in concentration_info["Dependencies"]["receptors"] %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_rec_{{inline.variable_name}}_conc_[concentration_id];
+    [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_rec_{{inline.variable_name}}_conc_[concentration_id];
     {%- endfor %}
     {%- for inline in concentration_info["Dependencies"]["channels"] %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_chan_{{inline.variable_name}}_conc_[concentration_id];
+    [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_chan_{{inline.variable_name}}_conc_[concentration_id];
     {%- endfor %}
     {%- for inline in concentration_info["Dependencies"]["continuous"] %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_con_in_{{inline.variable_name}}_conc_[concentration_id];
+    [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_con_in_{{inline.variable_name}}_conc_[concentration_id];
     {%- endfor %}
     {%- for replacement, expression in concentration_info["cse_function_replacements"].items() %}
-    {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "concentration_id", non_vec_vars) }};
+    [[maybe_unused]] {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "concentration_id", non_vec_vars) }};
     {%- endfor %}
     {%- for replacement, expression in concentration_info["cse_body_replacements"].items() %}
-    {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "concentration_id", non_vec_vars) }};
+    [[maybe_unused]] {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "concentration_id", non_vec_vars) }};
     {%- endfor %}
     {{ assign_frozen_exp_sites(runtime_vector_printer.get_sites(runtime_group), "concentration_id", non_vec_vars) }}
     // states
@@ -1277,7 +1277,7 @@ void nest::{{ concentration_name }}{{cm_unique_suffix}}::f_numstep(const std::ve
         {%- for function in concentration_info["Functions"] %}
         {%- set function_name = function.get_name() %}
         {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
-            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function) }};
+            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function_name, concentration_info["DetailedRecordableFunctionCalls"], runtime_group, "i", non_vec_vars) }};
         {%- endif %}
         {%- endfor %}
         {%- endif %}
@@ -1645,31 +1645,31 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}::pre_run_hook()
 {%- endif %}
 {
 
-    {{ cm_scalar_t }} {{ printer_no_origin.print(receptor_info["analytic_helpers"]["__h"]["ASTVariable"]) }} = Time::get_resolution().get_ms();
+    [[maybe_unused]] {{ cm_scalar_t }} {{ printer_no_origin.print(receptor_info["analytic_helpers"]["__h"]["ASTVariable"]) }} = Time::get_resolution().get_ms();
     {%- for function in receptor_info["Functions"] %}
     {{render_lambda(function, printer_no_origin)}}
     {%- endfor %}
     {{ resize_frozen_exp_sites(runtime_vector_printer.get_sites(runtime_group), "neuron_" ~ receptor_name ~ "_receptor_count") }}
 
   for(std::size_t i = 0; i < neuron_{{ receptor_name }}_receptor_count; i++){
-    {{ cm_scalar_t }} v_comp = v_comp_rec_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} v_comp = v_comp_rec_[i];
     {%- for ode in receptor_info["Dependencies"]["concentrations"] %}
-    {{ cm_scalar_t }} {{ode.lhs.name}} = dep_conc_{{ode.lhs.name}}_rec_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} {{ode.lhs.name}} = dep_conc_{{ode.lhs.name}}_rec_[i];
     {%- endfor %}
     {%- for inline in receptor_info["Dependencies"]["receptors"] %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_rec_{{inline.variable_name}}_rec_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_rec_{{inline.variable_name}}_rec_[i];
     {%- endfor %}
     {%- for inline in receptor_info["Dependencies"]["channels"] %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_chan_{{inline.variable_name}}_rec_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_chan_{{inline.variable_name}}_rec_[i];
     {%- endfor %}
     {%- for inline in receptor_info["Dependencies"]["continuous"] %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_con_in_{{inline.variable_name}}_rec_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_con_in_{{inline.variable_name}}_rec_[i];
     {%- endfor %}
     {%- for replacement, expression in receptor_info["cse_function_replacements"].items() %}
-    {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
+    [[maybe_unused]] {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
     {%- endfor %}
     {%- for replacement, expression in receptor_info["cse_body_replacements"].items() %}
-    {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
+    [[maybe_unused]] {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
     {%- endfor %}
     {{ assign_frozen_exp_sites(runtime_vector_printer.get_sites(runtime_group), "i", non_vec_vars) }}
     // set propagators to ode toolbox returned value
@@ -1809,7 +1809,7 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}::f_numstep(const std::vector< {
         {%- for function in receptor_info["Functions"] %}
         {%- set function_name = function.get_name() %}
         {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
-            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function) }};
+            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function_name, receptor_info["DetailedRecordableFunctionCalls"], runtime_group, "i", non_vec_vars) }};
         {%- endif %}
         {%- endfor %}
         {%- endif %}
@@ -2378,31 +2378,31 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}_con_{{synapse_name}}::pre_run_h
 {%- endif %}
 {
 
-  {{ cm_scalar_t }} {{ printer_no_origin.print(receptor_info["analytic_helpers"]["__h"]["ASTVariable"]) }} = Time::get_resolution().get_ms();
+  [[maybe_unused]] {{ cm_scalar_t }} {{ printer_no_origin.print(receptor_info["analytic_helpers"]["__h"]["ASTVariable"]) }} = Time::get_resolution().get_ms();
   {%- for function in receptor_info["Functions"] %}
   {{render_lambda(function, printer_no_origin)}}
   {%- endfor %}
   {{ resize_frozen_exp_sites(runtime_vector_printer.get_sites(runtime_group), "neuron_" ~ receptor_name ~ "_receptor_count") }}
 
   for(std::size_t i = 0; i < neuron_{{ receptor_name }}_receptor_count; i++){
-    {{ cm_scalar_t }} v_comp = v_comp_rec_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} v_comp = v_comp_rec_[i];
     {%- for ode in conc_dep %}
-    {{ cm_scalar_t }} {{ode.lhs.name}} = dep_conc_{{ode.lhs.name}}_rec_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} {{ode.lhs.name}} = dep_conc_{{ode.lhs.name}}_rec_[i];
     {%- endfor %}
     {%- for inline in rec_dep %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_rec_{{inline.variable_name}}_rec_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_rec_{{inline.variable_name}}_rec_[i];
     {%- endfor %}
     {%- for inline in chan_dep %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_chan_{{inline.variable_name}}_rec_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_chan_{{inline.variable_name}}_rec_[i];
     {%- endfor %}
     {%- for inline in con_in_dep %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_con_in_{{inline.variable_name}}_rec_[i];
+    [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_con_in_{{inline.variable_name}}_rec_[i];
     {%- endfor %}
     {%- for replacement, expression in receptor_info["cse_function_replacements"].items() %}
-    {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
+    [[maybe_unused]] {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
     {%- endfor %}
     {%- for replacement, expression in receptor_info["cse_body_replacements"].items() %}
-    {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
+    [[maybe_unused]] {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
     {%- endfor %}
     {{ assign_frozen_exp_sites(runtime_vector_printer.get_sites(runtime_group), "i", non_vec_vars) }}
     // set propagators to ode toolbox returned value
@@ -2637,7 +2637,7 @@ void nest::{{receptor_name}}{{cm_unique_suffix}}_con_{{synapse_name}}::f_numstep
         {%- for function in receptor_info["Functions"] %}
         {%- set function_name = function.get_name() %}
         {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
-            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function) }};
+            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function_name, receptor_info["DetailedRecordableFunctionCalls"], runtime_group, "i", non_vec_vars) }};
         {%- endif %}
         {%- endfor %}
         {%- endif %}
@@ -3053,24 +3053,24 @@ void nest::{{continuous_name}}{{cm_unique_suffix}}::pre_run_hook()
   {%- endfor %}
   {{ resize_frozen_exp_sites(runtime_vector_printer.get_sites(runtime_group), "neuron_" ~ continuous_name ~ "_continuous_input_count") }}
   for(std::size_t i = 0; i < neuron_{{ continuous_name }}_continuous_input_count; i++){
-    {{ cm_scalar_t }} v_comp = v_comp_con_in_[i];
+  [[maybe_unused]] {{ cm_scalar_t }} v_comp = v_comp_con_in_[i];
     {%- for ode in continuous_info["Dependencies"]["concentrations"] %}
-    {{ cm_scalar_t }} {{ode.lhs.name}} = dep_conc_{{ode.lhs.name}}_con_in_[i];
+  [[maybe_unused]] {{ cm_scalar_t }} {{ode.lhs.name}} = dep_conc_{{ode.lhs.name}}_con_in_[i];
     {%- endfor %}
     {%- for inline in continuous_info["Dependencies"]["receptors"] %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_rec_{{inline.variable_name}}_con_in_[i];
+  [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_rec_{{inline.variable_name}}_con_in_[i];
     {%- endfor %}
     {%- for inline in continuous_info["Dependencies"]["channels"] %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_chan_{{inline.variable_name}}_con_in_[i];
+  [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_chan_{{inline.variable_name}}_con_in_[i];
     {%- endfor %}
     {%- for inline in continuous_info["Dependencies"]["continuous"] %}
-    {{ cm_scalar_t }} {{inline.variable_name}} = dep_con_in_{{inline.variable_name}}_con_in_[i];
+  [[maybe_unused]] {{ cm_scalar_t }} {{inline.variable_name}} = dep_con_in_{{inline.variable_name}}_con_in_[i];
     {%- endfor %}
     {%- for replacement, expression in continuous_info["cse_function_replacements"].items() %}
-    {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
+    [[maybe_unused]] {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
     {%- endfor %}
     {%- for replacement, expression in continuous_info["cse_body_replacements"].items() %}
-    {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
+    [[maybe_unused]] {{ cm_scalar_t }} {{ replacement }} = {{ vector_printer_exact.print(expression, "i", non_vec_vars) }};
     {%- endfor %}
     {{ assign_frozen_exp_sites(runtime_vector_printer.get_sites(runtime_group), "i", non_vec_vars) }}
      // user declared internals in order they were declared
@@ -3217,7 +3217,7 @@ void nest::{{continuous_name}}{{cm_unique_suffix}}::f_numstep(const std::vector<
         {%- for function in continuous_info["Functions"] %}
         {%- set function_name = function.get_name() %}
         {%- if function_name.startswith("tau_") or "_inf_" in function_name or function_name.startswith("m_inf_") or function_name.startswith("h_inf_") or function_name.startswith("z_inf_") %}
-            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function) }};
+            {{ function_name }}_recordable[i] = {{ render_detailed_function_call(function_name, continuous_info["DetailedRecordableFunctionCalls"], runtime_group, "i", non_vec_vars) }};
         {%- endif %}
         {%- endfor %}
         {%- endif %}

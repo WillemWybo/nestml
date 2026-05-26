@@ -191,6 +191,30 @@ def test_detailed_recordables_codegen(tmp_path, monkeypatch):
     assert "tau_h_Na_recordable" in neuroncurrents_h
     assert "__P__h_Na__h_Na_recordable" in neuroncurrents_h
     assert "__P__m_Na__m_Na_recordable" in neuroncurrents_h
+    assert neuroncurrents_h.count("zero_recordable = 0;") >= 2
     assert 'Name( std::string("m_inf_Na") + std::to_string(compartment_idx))' in neuroncurrents_cpp
     assert 'Name( std::string("tau_h_Na") + std::to_string(compartment_idx))' in neuroncurrents_cpp
     assert "__P__h_Na__h_Na_recordable[i] = __P__h_Na__h_Na;" in neuroncurrents_cpp
+
+
+def test_detailed_recordables_use_runtime_callsite_arguments(tmp_path, monkeypatch):
+    monkeypatch.setattr(frontend, "builder_from_target_name", lambda *args, **kwargs: (None, {}))
+
+    target_path = tmp_path / "detailed_conc"
+    generate_nest_compartmental_target(
+        input_path=_resource_path("concmech.nestml"),
+        target_path=str(target_path),
+        module_name="detailed_recordables_conc_module",
+        suffix="_nestml",
+        logging_level="INFO",
+        codegen_opts={
+            "nest_version": "v3.4",
+            "with_detailed_recordables": True,
+        },
+    )
+
+    neuroncurrents_cpp = (
+        target_path / "cm_neuroncurrents_multichannel_test_model_nestml.cpp"
+    ).read_text()
+
+    assert "z_inf_SK_E2_recordable[i] = z_inf_SK_E2(c_Ca);" in neuroncurrents_cpp

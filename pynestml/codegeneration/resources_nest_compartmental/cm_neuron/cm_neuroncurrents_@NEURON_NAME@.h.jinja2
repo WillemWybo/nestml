@@ -443,6 +443,9 @@ private:
   {%- endfor %}
   {%- endif %}
 
+  // zero recordable fallback for compartments without this mechanism
+  {{ cm_scalar_t }} zero_recordable = 0;
+
   // user declared internals in order they were declared, initialized via pre_run_hook() or calibrate()
   {%- for internal_name, internal_declaration in receptor_info["Internals"].items() %}
   std::vector< {{ cm_scalar_t }} > {{internal_name}};
@@ -647,6 +650,9 @@ private:
       {%- endfor %}
   {%- endfor %}
   {%- endif %}
+
+  // zero recordable fallback for compartments without this mechanism
+  {{ cm_scalar_t }} zero_recordable = 0;
 
   // user declared internals in order they were declared, initialized via pre_run_hook() or calibrate()
   {%- for internal_name, internal_declaration in receptor_info["Internals"].items() %}
@@ -857,6 +863,9 @@ private:
       {%- endfor %}
   {%- endfor %}
   {%- endif %}
+
+  // zero recordable fallback for compartments without this mechanism
+  {{ cm_scalar_t }} zero_recordable = 0;
 
   // user declared internals in order they were declared, initialized via pre_run_hook() or calibrate()
   {%- for internal_name, internal_declaration in continuous_info["Internals"].items() %}

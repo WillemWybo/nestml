@@ -757,6 +757,78 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
             underscore_pos = ret.find("_")
         return ret
 
+    @staticmethod
+    def _collect_detailed_recordable_calls_from_expressions(expressions, functions):
+        detailed_calls = {}
+        function_names = [function.get_name() for function in functions]
+
+        for function_name in function_names:
+            for expression in expressions:
+                if expression is None:
+                    continue
+                calls = ASTUtils.get_function_calls(expression, [function_name])
+                if calls:
+                    detailed_calls[function_name] = calls[0]
+                    break
+
+        return detailed_calls
+
+    @classmethod
+    def _collect_mechanism_runtime_expressions(cls, mechanism_info):
+        expressions = []
+
+        expressions.extend(mechanism_info.get("cse_function_replacements", {}).values())
+        expressions.extend(mechanism_info.get("cse_body_replacements", {}).values())
+
+        for variable_info in mechanism_info.get("SecondaryInlineExpressions", []):
+            expressions.append(variable_info.expression)
+
+        for ode_info in mechanism_info.get("ODEs", {}).values():
+            solution = ode_info["transformed_solutions"][0]
+            expressions.extend(
+                propagator_info["init_expression"]
+                for propagator_info in solution.get("propagators", {}).values()
+            )
+            expressions.extend(
+                state_solution_info["update_expression"]
+                for state_solution_info in solution.get("states", {}).values()
+            )
+
+        for convolution_info in mechanism_info.get("convolutions", {}).values():
+            analytic_solution = convolution_info["analytic_solution"]
+            expressions.extend(
+                state_variable_info["update_expression"]
+                for state_variable_info in analytic_solution.get("kernel_states", {}).values()
+            )
+            expressions.extend(
+                state_variable_info["init_expression"]
+                for state_variable_info in analytic_solution.get("kernel_states", {}).values()
+            )
+
+        for expr_key in ("root_expression", "inline_derivative"):
+            if expr_key in mechanism_info:
+                expressions.append(mechanism_info[expr_key])
+
+        return expressions
+
+    @classmethod
+    def _attach_detailed_recordable_calls(cls, mechanism_info):
+        mechanism_info["DetailedRecordableFunctionCalls"] = (
+            cls._collect_detailed_recordable_calls_from_expressions(
+                cls._collect_mechanism_runtime_expressions(mechanism_info),
+                mechanism_info.get("Functions", []),
+            )
+        )
+        return mechanism_info
+
+    @classmethod
+    def _attach_detailed_recordable_calls_all(cls, mechanisms_info):
+        for mechanism_name, mechanism_info in mechanisms_info.items():
+            mechanisms_info[mechanism_name] = cls._attach_detailed_recordable_calls(
+                mechanism_info
+            )
+        return mechanisms_info
+
     def _get_neuron_model_namespace(self, neuron: ASTModel, paired_synapse: ASTModel = None) -> Dict:
         """
         Returns a standard namespace for generating neuron code for NEST
@@ -1060,15 +1132,19 @@ class NESTCompartmentalCodeGenerator(CodeGenerator):
         # get the mechanisms info dictionaries and enrich them.
         namespace["chan_info"] = ChannelProcessing.get_mechs_info(neuron)
         namespace["chan_info"] = ChanInfoEnricher.enrich_with_additional_info(neuron, namespace["chan_info"])
+        namespace["chan_info"] = self._attach_detailed_recordable_calls_all(namespace["chan_info"])
 
         namespace["recs_info"] = ReceptorProcessing.get_mechs_info(neuron)
         namespace["recs_info"] = RecsInfoEnricher.enrich_with_additional_info(neuron, namespace["recs_info"])
+        namespace["recs_info"] = self._attach_detailed_recordable_calls_all(namespace["recs_info"])
 
         namespace["conc_info"] = ConcentrationProcessing.get_mechs_info(neuron)
         namespace["conc_info"] = ConcInfoEnricher.enrich_with_additional_info(neuron, namespace["conc_info"])
+        namespace["conc_info"] = self._attach_detailed_recordable_calls_all(namespace["conc_info"])
 
         namespace["con_in_info"] = ContinuousInputProcessing.get_mechs_info(neuron)
         namespace["con_in_info"] = ConInInfoEnricher.enrich_with_additional_info(neuron, namespace["con_in_info"])
+        namespace["con_in_info"] = self._attach_detailed_recordable_calls_all(namespace["con_in_info"])
 
         if paired_synapse:
             namespace["syns_info"] = SynapseProcessing.get_syn_info(paired_synapse)
